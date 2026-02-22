@@ -32,7 +32,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className="dark">
-      <body className={`${geistSans.variable} ${geistMono.variable} antialiased min-h-screen flex bg-[#0d1117] text-gray-300`}>
+      <body className={`${geistSans.variable} ${geistMono.variable} antialiased min-h-screen flex bg-[#0d1117] text-gray-300 selection:bg-cyan-500/30`}>
         {/* Sidebar - GitHub Dark Style */}
         <nav className="w-64 min-h-screen border-r border-[#30363d] flex flex-col py-6 px-4 shrink-0 bg-[#161b22]">
           {/* Logo */}
@@ -76,7 +76,7 @@ export default function RootLayout({
         </nav>
 
         {/* Main Content */}
-        <main className="flex-1 overflow-y-auto">
+        <main className="flex-1 overflow-y-auto bg-[#0d1117]">
           {/* Top Bar */}
           <div className="border-b border-[#30363d] px-8 py-4 bg-[#161b22]/50 backdrop-blur flex items-center justify-between">
             <div className="flex items-center gap-4">
