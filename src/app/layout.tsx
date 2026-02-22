@@ -24,6 +24,7 @@ const navItems = [
   { label: "🤖 Agents", href: "/agents" },
   { label: "📱 Nodes", href: "/nodes" },
   { label: "🛠️ Tools", href: "/tools" },
+  { label: "📋 Logs", href: "/logs" },
   { label: "⚙️ Settings", href: "/settings" },
 ];
 
