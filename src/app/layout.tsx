@@ -19,10 +19,10 @@ export const metadata: Metadata = {
 
 const navItems = [
   { label: "📊 Dashboard", href: "/" },
+  { label: "🎯 Missions", href: "/missions" },
+  { label: "✅ Tasks", href: "/tasks" },
   { label: "🤖 Agents", href: "/agents" },
   { label: "📱 Nodes", href: "/nodes" },
-  { label: "✅ Tasks", href: "/tasks" },
-  { label: "🎯 Missions", href: "/missions" },
   { label: "🛠️ Tools", href: "/tools" },
   { label: "⚙️ Settings", href: "/settings" },
 ];
