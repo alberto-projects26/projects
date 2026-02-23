@@ -43,7 +43,8 @@ export default function TasksPage() {
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [filterMission, setFilterMission] = useState<string>('all');
   const [showNewTask, setShowNewTask] = useState(false);
-  const [expandedTask, setExpandedTask] = useState<string | null>(null);
+  const [ expandedTask, setExpandedTask] = useState<string | null>(null);
+  const [viewingPlan, setViewingPlan] = useState<Task | null>(null);
 
   const missions = useMemo(() => [...new Set(tasks.filter(t => t.mission).map(t => t.mission!))], [tasks]);
 
@@ -72,7 +73,7 @@ export default function TasksPage() {
       return { 
         ...task, 
         status: 'in-progress', 
-        plan: `Executing task ${task.id}: Initializing logic...`, 
+        plan: `Task Analysis: Review requirements and codebase\nPhase 1: Setup dependencies and core module\nPhase 2: Implement main functionality with tests\nPhase 3: Integration and final validation`, 
         planApproved: false 
       };
     }));
@@ -96,21 +97,6 @@ export default function TasksPage() {
     setTasks(prev => prev.map(task => {
       if (task.id !== id) return task;
       return { ...task, status: 'done', approved: true };
-    }));
-  };
-
-  const moveTaskStatus = (id: string, direction: 'forward' | 'backward') => {
-    const statusOrder: Task['status'][] = ['todo', 'in-progress', 'review', 'done'];
-    setTasks(prev => prev.map(task => {
-      if (task.id !== id) return task;
-      const idx = statusOrder.indexOf(task.status);
-      if (direction === 'forward' && idx < statusOrder.length - 1) {
-        return { ...task, status: statusOrder[idx + 1] };
-      }
-      if (direction === 'backward' && idx > 0) {
-        return { ...task, status: statusOrder[idx - 1] };
-      }
-      return task;
     }));
   };
 
@@ -231,9 +217,13 @@ export default function TasksPage() {
 
                       {task.status === 'in-progress' && !task.planApproved && (
                         <div className="space-y-3">
-                          <div className="p-2 bg-yellow-500/10 border border-yellow-500/20 rounded text-[11px]">
+                          <div 
+                            onClick={() => setViewingPlan(task)}
+                            className="p-2 bg-yellow-500/10 border border-yellow-500/20 rounded text-[11px] cursor-pointer hover:bg-yellow-500/20 transition-colors"
+                          >
                             <p className="text-yellow-400 font-bold mb-1">📋 PROPOSED PLAN:</p>
-                            <p className="text-gray-400 italic">"{task.plan}"</p>
+                            <p className="text-gray-400 italic line-clamp-2">{task.plan}</p>
+                            <p className="text-[9px] text-yellow-500/60 mt-1 uppercase tracking-wide">Click to view full plan →</p>
                           </div>
                           <button 
                             onClick={() => approvePlan(task.id)}
@@ -286,6 +276,119 @@ export default function TasksPage() {
           );
         })}
       </div>
+
+      {/* Plan View Modal */}
+      {viewingPlan && (
+        <div 
+          className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50"
+          onClick={() => setViewingPlan(null)}
+        >
+          <div 
+            className="bg-[#161b22] border border-[#30363d] rounded-2xl p-8 w-full max-w-2xl m-4 shadow-2xl"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex items-start justify-between mb-6">
+              <div>
+                <h2 className="text-2xl font-bold text-white">Execution Plan</h2>
+                <p className="text-gray-500 text-sm mt-1">{viewingPlan.title}</p>
+              </div>
+              <button 
+                onClick={() => setViewingPlan(null)}
+                className="text-gray-500 hover:text-white text-2xl"
+              >
+                ×
+              </button>
+            </div>
+            
+            <div className="bg-[#0d1117] border border-[#30363d] rounded-xl p-6">
+              <pre className="text-gray-300 text-sm whitespace-pre-wrap font-mono leading-relaxed">
+                {viewingPlan.plan}
+              </pre>
+            </div>
+
+            <div className="flex gap-3 mt-6">
+              <button 
+                onClick={() => {
+                  approvePlan(viewingPlan.id);
+                  setViewingPlan(null);
+                }}
+                className="flex-1 py-3 bg-gradient-to-r from-yellow-600 to-orange-600 text-white font-bold rounded-xl shadow-lg"
+              >
+                ✅ APPROVE THIS PLAN
+              </button>
+              <button 
+                onClick={() => setViewingPlan(null)}
+                className="px-6 py-3 bg-[#21262d] text-gray-400 rounded-xl hover:text-white"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* New Task Modal */}
+      {showNewTask && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
+          <div className="bg-[#161b22] border border-[#30363d] rounded-xl p-6 w-full max-w-md">
+            <h2 className="text-xl font-bold text-white mb-4">Create New Task</h2>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm text-gray-400 mb-2">Task Title</label>
+                <input 
+                  type="text"
+                  value={newTask.title}
+                  onChange={(e) => setNewTask({ ...newTask, title: e.target.value })}
+                  className="w-full px-4 py-2 rounded-lg bg-[#0d1117] border border-[#30363d] text-white focus:border-cyan-500 focus:outline-none"
+                  placeholder="What needs to be done?"
+                />
+              </div>
+              <div>
+                <label className="block text-sm text-gray-400 mb-2">Mission</label>
+                <input 
+                  type="text"
+                  value={newTask.mission}
+                  onChange={(e) => setNewTask({ ...newTask, mission: e.target.value })}
+                  className="w-full px-4 py-2 rounded-lg bg-[#0d1117] border border-[#30363d] text-white focus:border-cyan-500 focus:outline-none"
+                  placeholder="Link to a mission (optional)"
+                />
+              </div>
+              <div>
+                <label className="block text-sm text-gray-400 mb-2">Priority</label>
+                <div className="flex gap-2">
+                  {(['low', 'medium', 'high', 'critical'] as const).map(p => (
+                    <button
+                      key={p}
+                      onClick={() => setNewTask({ ...newTask, priority: p })}
+                      className={`flex-1 px-3 py-2 rounded-lg text-sm capitalize transition-colors ${
+                        newTask.priority === p 
+                          ? 'bg-cyan-600 text-white' 
+                          : 'bg-[#21262d] text-gray-400 hover:bg-[#30363d]'
+                      }`}
+                    >
+                      {p}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+            <div className="flex justify-end gap-3 mt-6">
+              <button 
+                onClick={() => setShowNewTask(false)}
+                className="px-4 py-2 text-gray-400 hover:text-white transition-colors"
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={addTask}
+                className="px-6 py-2 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white font-medium transition-colors"
+              >
+                Create Task
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
