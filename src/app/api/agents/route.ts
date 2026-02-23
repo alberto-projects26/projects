@@ -1,76 +1,70 @@
 import { execSync } from 'child_process';
+import { readFileSync } from 'fs';
 import { NextResponse } from 'next/server';
+
+function extractJSON(output: string): any {
+  const lastBrace = output.lastIndexOf('{');
+  const lastBracket = output.lastIndexOf('[');
+  const startIdx = Math.max(lastBrace, lastBracket);
+  if (startIdx === -1) return null;
+  try {
+    return JSON.parse(output.slice(startIdx));
+  } catch {
+    return null;
+  }
+}
 
 export async function GET() {
   try {
-    // Check OpenClaw status first
-    const statusOutput = execSync('openclaw status 2>&1 || echo "not-running"', {
-      encoding: 'utf-8',
-      timeout: 3000
-    });
-    
-    if (statusOutput.includes('not-running') || statusOutput.includes('stopped')) {
-      console.log('OpenClaw gateway not running');
-      throw new Error('OpenClaw not running');
+    let sessions: any[] = [];
+    try {
+      // Direct file read for speed and reliability
+      const fileData = readFileSync('/Users/jarvis/.openclaw/agents/main/sessions/sessions.json', 'utf-8');
+      const parsed = JSON.parse(fileData);
+      
+      // Handle both {sessions: [...]} and raw array formats
+      if (parsed.sessions) {
+        sessions = parsed.sessions;
+      } else if (Array.isArray(parsed)) {
+        sessions = parsed;
+      } else if (typeof parsed === 'object') {
+        // Handle object with session entries
+        sessions = Object.entries(parsed).map(([key, value]: [string, any]) => ({
+          key,
+          ...value
+        }));
+      }
+    } catch (e) {
+      // Fallback to CLI if file read fails
+      const output = execSync('openclaw sessions list 2>&1', { encoding: 'utf-8', timeout: 5000 });
+      const parsed = extractJSON(output);
+      if (parsed?.sessions) {
+        sessions = parsed.sessions;
+      } else if (Array.isArray(parsed)) {
+        sessions = parsed;
+      }
     }
 
-    // Try to get real session data from OpenClaw
-    const output = execSync('openclaw sessions list -k default,cron --json 2>/dev/null', { 
-      encoding: 'utf-8',
-      timeout: 8000 
-    });
-    
-    const sessions = JSON.parse(output || '[]');
-    
     if (!Array.isArray(sessions) || sessions.length === 0) {
-      console.log('No active sessions found');
-      throw new Error('No sessions');
+      return NextResponse.json({ agents: [], source: 'empty' });
     }
     
-    // Transform to agent format with cost tracking
-    const agents = await Promise.all(sessions.map(async (session: any) => {
-      const sessionKey = session.sessionKey || session.id || 'unknown';
-      
-      // Get cost data if available
-      let costToday = 0;
-      try {
-        const costOutput = execSync(`openclaw sessions status ${sessionKey} 2>/dev/null || echo "{}"`, {
-          encoding: 'utf-8',
-          timeout: 2000
-        });
-        const costData = JSON.parse(costOutput);
-        costToday = costData.cost || costData.tokens?.cost || 0;
-      } catch {}
-      
-      return {
-        id: sessionKey,
-        name: session.label || session.agentId || 'Agent ' + sessionKey.slice(-4),
-        status: session.activeMinutes && session.activeMinutes < 30 ? 'active' : 'idle',
-        model: session.model || 'auto',
-        provider: session.provider || 'openrouter',
-        tokensIn: session.tokensPrompt || 0,
-        tokensOut: session.tokensCompletion || 0,
-        costToday: costToday,
-        uptime: session.activeMinutes ? 
-          `${Math.floor(session.activeMinutes / 60)}h ${session.activeMinutes % 60}m` : 
-          'just started',
-        lastActivity: session.lastMessageAt ? 
-          new Date(session.lastMessageAt).toLocaleTimeString() : 
-          'Unknown',
-      };
+    const agents = sessions.map((session: any) => ({
+      id: session.key || session.sessionId || 'unknown',
+      name: session.label || session.displayName || session.subject || session.key?.split(':').pop() || 'Agent',
+      status: session.updatedAt && (Date.now() - session.updatedAt < 300000) ? 'active' : 'idle',
+      model: session.model || 'auto',
+      provider: session.modelProvider || 'openrouter',
+      tokensIn: session.inputTokens || 0,
+      tokensOut: session.outputTokens || 0,
+      costToday: 0,
+      uptime: session.ageMs ? `${Math.floor(session.ageMs / 60000)}m` : '0m',
+      lastActivity: session.updatedAt ? new Date(session.updatedAt).toLocaleTimeString() : 'Unknown',
     }));
     
-    return NextResponse.json({ 
-      agents, 
-      source: 'real',
-      timestamp: new Date().toISOString()
-    });
+    return NextResponse.json({ agents, source: 'real', count: agents.length });
   } catch (error: any) {
-    console.log('OpenClaw fetch failed:', error.message);
-    return NextResponse.json({ 
-      agents: [],
-      error: error.message || 'OpenClaw unavailable',
-      source: 'error'
-    }, { status: 200 }); // Return 200 so UI can handle gracefully
+    console.error('OpenClaw fetch failed:', error.message);
+    return NextResponse.json({ agents: [], error: error.message, source: 'error' });
   }
 }

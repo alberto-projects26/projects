@@ -1,21 +1,37 @@
 import { execSync } from 'child_process';
 import { NextResponse } from 'next/server';
 
+function extractJSON(output: string): any {
+  const lastBrace = output.lastIndexOf('{');
+  const lastBracket = output.lastIndexOf('[');
+  const startIdx = Math.max(lastBrace, lastBracket);
+  if (startIdx === -1) return null;
+  try {
+    return JSON.parse(output.slice(startIdx));
+  } catch {
+    return null;
+  }
+}
+
 export async function GET() {
   try {
-    // Get real node status from OpenClaw via 'nodes status'
-    const output = execSync('openclaw nodes status --json 2>/dev/null', { 
-      encoding: 'utf-8',
-      timeout: 8000 
-    });
-    
-    const nodes = JSON.parse(output || '[]');
-    
-    if (!Array.isArray(nodes)) {
-      throw new Error('Malformed node response');
+    let nodes: any[] = [];
+    try {
+      const output = execSync('openclaw nodes status --json 2>&1', { 
+        encoding: 'utf-8', 
+        timeout: 5000 
+      });
+      const parsed = extractJSON(output);
+      
+      if (parsed?.nodes) {
+        nodes = parsed.nodes;
+      } else if (Array.isArray(parsed)) {
+        nodes = parsed;
+      }
+    } catch (e) {
+      console.error('CLI nodes call failed');
     }
-    
-    // Transform to Mission Control format
+
     const formattedNodes = nodes.map((node: any) => ({
       id: node.id || node.deviceId || 'unknown',
       name: node.displayName || node.name || 'Remote Node',
@@ -37,11 +53,10 @@ export async function GET() {
       count: formattedNodes.length 
     });
   } catch (error: any) {
-    console.log('Node fetch failed:', error.message);
     return NextResponse.json({ 
-      nodes: [],
-      error: 'Nodes unavailable',
-      source: 'error'
+      nodes: [], 
+      error: error.message, 
+      source: 'error' 
     });
   }
 }

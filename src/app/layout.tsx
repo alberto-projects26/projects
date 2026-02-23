@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import CommandPalette from "@/components/CommandPalette";
-import { auth, signOut } from "@/auth";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -30,25 +29,11 @@ const navItems = [
   { label: "⚙️ Settings", href: "/settings" },
 ];
 
-export default async function RootLayout({
+export default function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const session = await auth();
-
-  // If not authenticated, we just render children (which will be the Login page for matched routes)
-  // or a simple wrapper. The middleware handles the actual redirect.
-  if (!session) {
-    return (
-      <html lang="en" className="dark">
-        <body className={`${geistSans.variable} ${geistMono.variable} antialiased min-h-screen bg-[#0d1117] text-gray-300`}>
-          {children}
-        </body>
-      </html>
-    );
-  }
-
   return (
     <html lang="en" className="dark">
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased min-h-screen flex bg-[#0d1117] text-gray-300 selection:bg-cyan-500/30`}>
@@ -85,30 +70,12 @@ export default async function RootLayout({
           </ul>
 
           {/* User Info & Logout */}
-          <div className="mt-auto px-4 py-4 border-t border-[#30363d] mb-4">
-             <div className="flex items-center justify-between">
-                <div className="flex flex-col">
-                  <span className="text-xs font-semibold text-white">Commander</span>
-                  <span className="text-[10px] text-gray-500">alberto@local</span>
-                </div>
-                <form action={async () => {
-                  "use server";
-                  await signOut();
-                }}>
-                  <button className="text-gray-500 hover:text-red-400 text-xs transition-colors">
-                    Logout
-                  </button>
-                </form>
+          <div className="mt-auto px-4 py-4 border-t border-[#30363d]">
+             <div className="text-xs text-gray-500">Commander</div>
+             <div className="flex items-center gap-2 mt-2">
+               <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+               <span className="text-[10px] text-gray-500">SYSTEM ONLINE</span>
              </div>
-          </div>
-
-          {/* Status Footer */}
-          <div className="px-4 py-4 border-t border-[#30363d]">
-            <div className="flex items-center gap-2">
-              <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
-              <span className="text-xs text-gray-500 font-mono">SYSTEM ONLINE</span>
-            </div>
-            <div className="text-xs text-gray-600 mt-1">v1.0.0</div>
           </div>
         </nav>
 
@@ -118,7 +85,7 @@ export default async function RootLayout({
           <div className="border-b border-[#30363d] px-8 py-4 bg-[#161b22]/50 backdrop-blur flex items-center justify-between">
             <div className="flex items-center gap-4">
               <div className="px-3 py-1 rounded-full bg-[#21262d] border border-[#30363d] text-xs text-gray-400">
-                Jarvis AI Agent
+                Tailscale Network
               </div>
               <div className="text-sm text-gray-500">|</div>
               <div className="text-sm text-gray-400">
@@ -126,9 +93,6 @@ export default async function RootLayout({
               </div>
             </div>
             <div className="flex items-center gap-3">
-              <button className="px-4 py-2 rounded-lg bg-[#21262d] hover:bg-[#30363d] border border-[#30363d] text-sm text-gray-300 transition-colors">
-                ➕ New Task
-              </button>
               <button className="px-4 py-2 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white text-sm font-medium transition-colors shadow-lg shadow-cyan-600/20">
                 🚀 New Mission
               </button>
@@ -147,4 +111,3 @@ export default async function RootLayout({
     </html>
   );
 }
-
