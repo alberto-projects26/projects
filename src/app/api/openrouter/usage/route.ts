@@ -4,27 +4,29 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const missionId = searchParams.get('tag');
 
-  // In a real scenario, we'd query OpenRouter usage API with the tag
-  // https://openrouter.ai/api/v1/stats
+  // For real OpenRouter integration:
+  // 1. Import your OPENROUTER_API_KEY from env
+  // 2. Query: https://openrouter.ai/api/v1/stats?tag=mission_id:${missionId}
   
-  // Simulated cost-by-tag logic:
-  // If the tag exists, return a random realistic cost for that missionId
+  // Simulated data for demo (deterministic based on missionId hash)
   if (missionId) {
-    // Determine a deterministic cost based on missionId hash
     let hash = 0;
     for (let i = 0; i < missionId.length; i++) {
         hash = ((hash << 5) - hash) + missionId.charCodeAt(i);
         hash |= 0;
     }
-    const simulatedCost = Math.abs(hash % 150) + (Math.random() * 10);
+    const baseCost = Math.abs(hash % 250) + 50; // $50-300 range
     
     return NextResponse.json({ 
       missionId,
-      total_cost: Number(simulatedCost.toFixed(2)),
-      tokens_in: hash % 50000,
-      tokens_out: hash % 20000 
+      total_cost: Number(baseCost.toFixed(2)),
+      tokens_prompt: Math.abs(hash * 100) % 50000,
+      tokens_completion: Math.abs(hash * 40) % 20000,
+      requests: Math.abs(hash % 50) + 5,
+      status: 'active',
+      last_updated: new Date().toISOString()
     });
   }
 
-  return NextResponse.json({ total_cost: 0 });
+  return NextResponse.json({ total_cost: 0, status: 'no_tag' });
 }

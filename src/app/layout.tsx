@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import CommandPalette from "@/components/CommandPalette";
+import { auth, signOut } from "@/auth";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -29,11 +30,25 @@ const navItems = [
   { label: "⚙️ Settings", href: "/settings" },
 ];
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const session = await auth();
+
+  // If not authenticated, we just render children (which will be the Login page for matched routes)
+  // or a simple wrapper. The middleware handles the actual redirect.
+  if (!session) {
+    return (
+      <html lang="en" className="dark">
+        <body className={`${geistSans.variable} ${geistMono.variable} antialiased min-h-screen bg-[#0d1117] text-gray-300`}>
+          {children}
+        </body>
+      </html>
+    );
+  }
+
   return (
     <html lang="en" className="dark">
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased min-h-screen flex bg-[#0d1117] text-gray-300 selection:bg-cyan-500/30`}>
@@ -69,8 +84,26 @@ export default function RootLayout({
             ))}
           </ul>
 
+          {/* User Info & Logout */}
+          <div className="mt-auto px-4 py-4 border-t border-[#30363d] mb-4">
+             <div className="flex items-center justify-between">
+                <div className="flex flex-col">
+                  <span className="text-xs font-semibold text-white">Commander</span>
+                  <span className="text-[10px] text-gray-500">alberto@local</span>
+                </div>
+                <form action={async () => {
+                  "use server";
+                  await signOut();
+                }}>
+                  <button className="text-gray-500 hover:text-red-400 text-xs transition-colors">
+                    Logout
+                  </button>
+                </form>
+             </div>
+          </div>
+
           {/* Status Footer */}
-          <div className="mt-auto px-4 py-4 border-t border-[#30363d]">
+          <div className="px-4 py-4 border-t border-[#30363d]">
             <div className="flex items-center gap-2">
               <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
               <span className="text-xs text-gray-500 font-mono">SYSTEM ONLINE</span>
@@ -114,3 +147,4 @@ export default function RootLayout({
     </html>
   );
 }
+

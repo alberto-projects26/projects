@@ -2,9 +2,11 @@
 
 import { useState } from 'react';
 import { useAgents } from '@/hooks/useAgents';
+import { useAssignments, assignAgentToMission } from '@/utils/assignmentStore';
 
 export default function AgentsPage() {
   const { agents, loading, error, usingMockData } = useAgents();
+  const assignments = useAssignments();
   const [showSpawnModal, setShowSpawnModal] = useState(false);
 
   const totalCost = agents.reduce((sum, agent) => sum + agent.costToday, 0);
@@ -77,19 +79,38 @@ export default function AgentsPage() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {agents.map((agent) => (
           <div key={agent.id} className="bg-[#161b22] border border-[#30363d] rounded-xl p-6 hover:border-gray-600 transition-colors group">
-            <div className="flex items-start justify-between mb-4">
+            <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-4">
                 <div className={`w-12 h-12 rounded-xl bg-[#21262d] flex items-center justify-center text-2xl border border-[#30363d]`}>
                   🤖
                 </div>
                 <div>
                   <h3 className="font-semibold text-white text-lg">{agent.name}</h3>
-                  <div className="text-sm text-gray-500">{agent.model} • {agent.provider}</div>
+                  <div className="flex items-center gap-2">
+                    <div className="text-sm text-gray-500">{agent.model}</div>
+                    {assignments[agent.id] && (
+                      <span className="px-2 py-0.5 rounded bg-cyan-500/10 text-cyan-400 text-[10px] font-bold border border-cyan-500/20 uppercase">
+                        🎯 {assignments[agent.id]}
+                      </span>
+                    )}
+                  </div>
                 </div>
               </div>
-              <span className={`px-3 py-1 rounded-full text-xs border ${agent.status === 'active' ? 'bg-green-500/10 text-green-400 border-green-500/30' : 'bg-gray-500/10 text-gray-400'}`}>
-                {agent.status.toUpperCase()}
-              </span>
+              <div className="flex flex-col items-end gap-2">
+                <span className={`px-3 py-1 rounded-full text-xs border ${agent.status === 'active' ? 'bg-green-500/10 text-green-400 border-green-500/30' : 'bg-gray-500/10 text-gray-400'}`}>
+                  {agent.status.toUpperCase()}
+                </span>
+                <select 
+                  className="bg-[#161b22] border border-[#30363d] text-[10px] text-gray-400 rounded px-2 py-1 outline-none focus:border-cyan-500"
+                  value={assignments[agent.id] || ''}
+                  onChange={(e) => assignAgentToMission(agent.id, e.target.value || null)}
+                >
+                  <option value="">No Mission</option>
+                  <option value="m-001">Mission Control Launch</option>
+                  <option value="m-002">Launch v2.0 Platform</option>
+                  <option value="m-003">Cost Audit</option>
+                </select>
+              </div>
             </div>
 
             <div className="grid grid-cols-3 gap-4 mb-4">

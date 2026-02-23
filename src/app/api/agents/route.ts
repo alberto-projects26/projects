@@ -3,36 +3,74 @@ import { NextResponse } from 'next/server';
 
 export async function GET() {
   try {
-    // Try to get real session data from OpenClaw
-    const output = execSync('openclaw sessions list --json 2>/dev/null || echo "[]"', { 
+    // Check OpenClaw status first
+    const statusOutput = execSync('openclaw status 2>&1 || echo "not-running"', {
       encoding: 'utf-8',
-      timeout: 5000 
+      timeout: 3000
     });
     
-    const sessions = JSON.parse(output);
+    if (statusOutput.includes('not-running') || statusOutput.includes('stopped')) {
+      console.log('OpenClaw gateway not running');
+      throw new Error('OpenClaw not running');
+    }
+
+    // Try to get real session data from OpenClaw
+    const output = execSync('openclaw sessions list -k default,cron --json 2>/dev/null', { 
+      encoding: 'utf-8',
+      timeout: 8000 
+    });
     
-    // Transform to agent format
-    const agents = sessions.map((session: any) => ({
-      id: session.sessionKey || session.id,
-      name: session.agentId || 'Unknown Agent',
-      status: session.activeMinutes < 5 ? 'active' : 'idle',
-      model: session.model || 'unknown',
-      provider: 'OpenRouter',
-      tokensIn: session.tokensIn || 0,
-      tokensOut: session.tokensOut || 0,
-      costToday: 0, // Would need cost API
-      uptime: session.activeMinutes ? `${Math.floor(session.activeMinutes / 60)}h ${session.activeMinutes % 60}m` : '0m',
-      lastActivity: session.lastMessageAt || 'Unknown',
+    const sessions = JSON.parse(output || '[]');
+    
+    if (!Array.isArray(sessions) || sessions.length === 0) {
+      console.log('No active sessions found');
+      throw new Error('No sessions');
+    }
+    
+    // Transform to agent format with cost tracking
+    const agents = await Promise.all(sessions.map(async (session: any) => {
+      const sessionKey = session.sessionKey || session.id || 'unknown';
+      
+      // Get cost data if available
+      let costToday = 0;
+      try {
+        const costOutput = execSync(`openclaw sessions status ${sessionKey} 2>/dev/null || echo "{}"`, {
+          encoding: 'utf-8',
+          timeout: 2000
+        });
+        const costData = JSON.parse(costOutput);
+        costToday = costData.cost || costData.tokens?.cost || 0;
+      } catch {}
+      
+      return {
+        id: sessionKey,
+        name: session.label || session.agentId || 'Agent ' + sessionKey.slice(-4),
+        status: session.activeMinutes && session.activeMinutes < 30 ? 'active' : 'idle',
+        model: session.model || 'auto',
+        provider: session.provider || 'openrouter',
+        tokensIn: session.tokensPrompt || 0,
+        tokensOut: session.tokensCompletion || 0,
+        costToday: costToday,
+        uptime: session.activeMinutes ? 
+          `${Math.floor(session.activeMinutes / 60)}h ${session.activeMinutes % 60}m` : 
+          'just started',
+        lastActivity: session.lastMessageAt ? 
+          new Date(session.lastMessageAt).toLocaleTimeString() : 
+          'Unknown',
+      };
     }));
     
-    return NextResponse.json({ agents, source: 'real' });
-  } catch (error) {
-    // Fallback to mock data if OpenClaw CLI fails
-    console.log('OpenClaw CLI not available, returning mock data');
+    return NextResponse.json({ 
+      agents, 
+      source: 'real',
+      timestamp: new Date().toISOString()
+    });
+  } catch (error: any) {
+    console.log('OpenClaw fetch failed:', error.message);
     return NextResponse.json({ 
       agents: [],
-      error: 'OpenClaw CLI not configured',
+      error: error.message || 'OpenClaw unavailable',
       source: 'error'
-    });
+    }, { status: 200 }); // Return 200 so UI can handle gracefully
   }
 }
