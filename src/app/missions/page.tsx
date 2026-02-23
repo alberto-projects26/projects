@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
+import { calculateMissionBudget, getOpenRouterCost } from '@/utils/costTracking';
 
 interface SubTask {
   id: string;
@@ -34,14 +35,12 @@ const initialMissions: Mission[] = [
     targetDate: '2026-02-28',
     owner: 'jarvis',
     tags: ['internal', 'dashboard', 'v1.0'],
-    costEstimate: 500,
-    costActual: 234,
     subTasks: [
       { id: 'st-1', title: 'Design system architecture', status: 'done' },
       { id: 'st-2', title: 'Build sidebar navigation', status: 'done' },
       { id: 'st-3', title: 'Create agent management view', status: 'done' },
       { id: 'st-4', title: 'Implement task kanban board', status: 'done' },
-      { id: 'st-5', title: 'Add mission progress tracking', status: 'in-progress' },
+      { id: 'st-5', title: 'Add mission progress tracking', status: 'done' },
       { id: 'st-6', title: 'Hardware node integration', status: 'todo' },
     ]
   },
@@ -55,10 +54,9 @@ const initialMissions: Mission[] = [
     targetDate: '2026-04-15',
     owner: 'human',
     tags: ['platform', 'v2.0', 'multi-node'],
-    costEstimate: 5000,
     subTasks: [
       { id: 'st-7', title: 'Define v2.0 requirements', status: 'done' },
-      { id: 'st-8', title: 'Architecture review', status: 'in-progress' },
+      { id: 'st-8', title: 'Architecture review', status: 'done' },
       { id: 'st-9', title: 'Multi-node protocol design', status: 'todo' },
       { id: 'st-10', title: 'Real-time sync implementation', status: 'todo' },
     ]
@@ -73,12 +71,10 @@ const initialMissions: Mission[] = [
     targetDate: '2026-02-25',
     owner: 'research-bot',
     tags: ['cost', 'audit', 'optimization'],
-    costEstimate: 200,
-    costActual: 89,
     subTasks: [
       { id: 'st-11', title: 'Collect usage data', status: 'done' },
       { id: 'st-12', title: 'Analyze provider costs', status: 'done' },
-      { id: 'st-13', title: 'Identify optimization opportunities', status: 'in-progress' },
+      { id: 'st-13', title: 'Identify optimization opportunities', status: 'done' },
       { id: 'st-14', title: 'Implement cost controls', status: 'todo' },
     ]
   }
@@ -103,6 +99,19 @@ export default function MissionsPage() {
   const [expandedMission, setExpandedMission] = useState<string | null>('m-001');
   const [showNewMission, setShowNewMission] = useState(false);
 
+  // Initialize and Update Costs
+  useEffect(() => {
+    async function updateMissions() {
+      const updated = await Promise.all(missions.map(async (m) => {
+        const costActual = await getOpenRouterCost(m.id);
+        const costEstimate = calculateMissionBudget(m);
+        return { ...m, costEstimate, costActual };
+      }));
+      setMissions(updated);
+    }
+    updateMissions();
+  }, []);
+
   const calculateProgress = (subTasks: SubTask[]) => {
     if (subTasks.length === 0) return 0;
     const done = subTasks.filter(t => t.status === 'done').length;
@@ -119,7 +128,7 @@ export default function MissionsPage() {
     const total = missions.length;
     const active = missions.filter(m => m.status === 'active').length;
     const completed = missions.filter(m => m.status === 'completed').length;
-    const avgProgress = Math.round(missions.reduce((sum, m) => sum + calculateProgress(m.subTasks), 0) / missions.length);
+    const avgProgress = Math.round(missions.reduce((sum, m) => sum + calculateProgress(m.subTasks), 0) / (missions.length || 1));
     const totalBudget = missions.reduce((sum, m) => sum + (m.costEstimate || 0), 0);
     const totalSpent = missions.reduce((sum, m) => sum + (m.costActual || 0), 0);
     return { total, active, completed, avgProgress, totalBudget, totalSpent };
@@ -156,6 +165,9 @@ export default function MissionsPage() {
         { id: `st-${Date.now()}-2`, title: 'Create sub-tasks', status: 'todo' },
       ]
     };
+    mission.costEstimate = calculateMissionBudget(mission);
+    mission.costActual = 0;
+    
     setMissions([...missions, mission]);
     setShowNewMission(false);
     setNewMission({ title: '', description: '', priority: 'medium' });
@@ -179,30 +191,19 @@ export default function MissionsPage() {
 
       {/* Mission Stats */}
       <div className="grid grid-cols-6 gap-4">
-        <div className="bg-gradient-to-br from-[#161b22] to-[#0d1117] border border-[#30363d] rounded-xl p-5">
-          <div className="text-sm text-gray-500">Total</div>
-          <div className="text-2xl font-bold text-white">{stats.total}</div>
-        </div>
-        <div className="bg-gradient-to-br from-[#161b22] to-[#0d1117] border border-[#30363d] rounded-xl p-5">
-          <div className="text-sm text-gray-500">Active</div>
-          <div className="text-2xl font-bold text-cyan-400">{stats.active}</div>
-        </div>
-        <div className="bg-gradient-to-br from-[#161b22] to-[#0d1117] border border-[#30363d] rounded-xl p-5">
-          <div className="text-sm text-gray-500">Completed</div>
-          <div className="text-2xl font-bold text-green-400">{stats.completed}</div>
-        </div>
-        <div className="bg-gradient-to-br from-[#161b22] to-[#0d1117] border border-[#30363d] rounded-xl p-5">
-          <div className="text-sm text-gray-500">Avg Progress</div>
-          <div className="text-2xl font-bold text-white">{stats.avgProgress}%</div>
-        </div>
-        <div className="bg-gradient-to-br from-[#161b22] to-[#0d1117] border border-[#30363d] rounded-xl p-5">
-          <div className="text-sm text-gray-500">Budget</div>
-          <div className="text-2xl font-bold text-white">${stats.totalBudget}</div>
-        </div>
-        <div className="bg-gradient-to-br from-[#161b22] to-[#0d1117] border border-[#30363d] rounded-xl p-5">
-          <div className="text-sm text-gray-500">Spent</div>
-          <div className="text-2xl font-bold text-purple-400">${stats.totalSpent}</div>
-        </div>
+        {[
+          { label: 'Total', value: stats.total, color: 'text-white' },
+          { label: 'Active', value: stats.active, color: 'text-cyan-400' },
+          { label: 'Completed', value: stats.completed, color: 'text-green-400' },
+          { label: 'Avg Progress', value: `${stats.avgProgress}%`, color: 'text-white' },
+          { label: 'Forecasted', value: `$${stats.totalBudget}`, color: 'text-white' },
+          { label: 'Spent', value: `$${stats.totalSpent.toFixed(2)}`, color: 'text-purple-400' },
+        ].map(stat => (
+          <div key={stat.label} className="bg-gradient-to-br from-[#161b22] to-[#0d1117] border border-[#30363d] rounded-xl p-5">
+            <div className="text-sm text-gray-500">{stat.label}</div>
+            <div className={`text-2xl font-bold ${stat.color}`}>{stat.value}</div>
+          </div>
+        ))}
       </div>
 
       {/* Mission Cards */}
@@ -267,14 +268,13 @@ export default function MissionsPage() {
                 <div className="flex items-center gap-6 mt-4 text-sm text-gray-500">
                   <span>👤 {mission.owner}</span>
                   <span>📅 {mission.startDate} → {mission.targetDate}</span>
-                  {mission.costActual && (
-                    <span>
-                      💰 ${mission.costActual} {mission.costEstimate && `/ $${mission.costEstimate}`}
-                    </span>
-                  )}
+                  <div className="flex items-center gap-3">
+                    <span>Forecast: <span className="text-white font-medium">${mission.costEstimate}</span></span>
+                    <span>Spent: <span className="text-purple-400 font-medium">${mission.costActual?.toFixed(2)}</span></span>
+                  </div>
                   <div className="flex gap-2">
                     {mission.tags.map(tag => (
-                      <span key={tag} className="px-2 py-0.5 bg-[#21262d] rounded text-xs">{tag}</span>
+                      <span key={tag} className="px-2 py-0.5 bg-[#21262d] rounded text-xs lowercase">{tag}</span>
                     ))}
                   </div>
                 </div>
@@ -282,34 +282,31 @@ export default function MissionsPage() {
 
               {/* Expanded Sub-Tasks */}
               {isExpanded && (
-                <div className="border-t border-[#30363d] px-6 pb-6">
-                  <h4 className="font-medium text-white mb-4 mt-4">Sub-Tasks</h4>
-                  <div className="space-y-2">
+                <div className="border-t border-[#30363d] px-6 pb-6 shadow-inner bg-[#0d1117]/30">
+                  <div className="flex items-center justify-between mb-4 mt-6">
+                    <h4 className="font-medium text-white">Mission Roadmap</h4>
+                    <span className="text-xs text-gray-500 font-mono">TAG: {mission.id}</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
                     {mission.subTasks.map(subTask => (
                       <div 
                         key={subTask.id}
-                        className="flex items-center gap-3 p-3 bg-[#0d1117] rounded-lg border border-[#30363d] hover:border-gray-500 transition-colors cursor-pointer"
+                        className="flex items-center gap-3 p-3 bg-[#161b22] rounded-lg border border-[#30363d] hover:border-cyan-500/30 transition-colors cursor-pointer group"
                         onClick={() => toggleSubTask(mission.id, subTask.id)}
                       >
-                        <div className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-colors ${
+                        <div className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-all ${
                           subTask.status === 'done' 
-                            ? 'bg-green-500 border-green-500' 
-                            : 'border-gray-500 hover:border-cyan-500'
+                            ? 'bg-green-500 border-green-500 shadow-lg shadow-green-500/20' 
+                            : 'border-gray-500 group-hover:border-cyan-500'
                         }`}>
-                          {subTask.status === 'done' && <span className="text-white text-xs">✓</span>}
+                          {subTask.status === 'done' && <span className="text-white text-[10px]">✓</span>}
                         </div>
-                        <span className={`flex-1 ${subTask.status === 'done' ? 'text-gray-500 line-through' : 'text-gray-300'}`}>
+                        <span className={`flex-1 text-sm ${subTask.status === 'done' ? 'text-gray-600 line-through' : 'text-gray-300'}`}>
                           {subTask.title}
-                        </span>
-                        <span className={`text-xs ${subTask.status === 'done' ? 'text-green-400' : 'text-gray-500'}`}>
-                          {subTask.status === 'done' ? 'Done' : 'Pending'}
                         </span>
                       </div>
                     ))}
                   </div>
-                  <button className="w-full mt-3 py-2 text-sm text-gray-500 hover:text-cyan-400 border border-dashed border-[#30363d] rounded-lg hover:border-cyan-500/30 transition-colors">
-                    + Add sub-task
-                  </button>
                 </div>
               )}
             </div>
@@ -319,40 +316,42 @@ export default function MissionsPage() {
 
       {/* New Mission Modal */}
       {showNewMission && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
-          <div className="bg-[#161b22] border border-[#30363d] rounded-xl p-6 w-full max-w-md">
-            <h2 className="text-xl font-bold text-white mb-4">Create New Mission</h2>
-            <div className="space-y-4">
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-[#161b22] border border-[#30363d] rounded-2xl p-8 w-full max-w-lg shadow-2xl">
+            <h2 className="text-2xl font-bold text-white mb-2">Initialize Mission</h2>
+            <p className="text-gray-500 text-sm mb-6">Budgets are automatically forecasted based on priority and roadmap complexity.</p>
+            
+            <div className="space-y-5">
               <div>
-                <label className="block text-sm text-gray-400 mb-2">Mission Title</label>
+                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Campaign Name</label>
                 <input 
                   type="text"
                   value={newMission.title}
                   onChange={(e) => setNewMission({ ...newMission, title: e.target.value })}
-                  className="w-full px-4 py-2 rounded-lg bg-[#0d1117] border border-[#30363d] text-white focus:border-cyan-500 focus:outline-none"
-                  placeholder="What are we accomplishing?"
+                  className="w-full px-4 py-3 rounded-xl bg-[#0d1117] border border-[#30363d] text-white focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500/50 outline-none transition-all placeholder:text-gray-600"
+                  placeholder="e.g. Project Overlord"
                 />
               </div>
               <div>
-                <label className="block text-sm text-gray-400 mb-2">Description</label>
+                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Strategic Objectives</label>
                 <textarea 
                   value={newMission.description}
                   onChange={(e) => setNewMission({ ...newMission, description: e.target.value })}
-                  className="w-full px-4 py-2 rounded-lg bg-[#0d1117] border border-[#30363d] text-white focus:border-cyan-500 focus:outline-none resize-none h-24"
-                  placeholder="Describe the mission objectives..."
+                  className="w-full px-4 py-3 rounded-xl bg-[#0d1117] border border-[#30363d] text-white focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500/50 outline-none transition-all resize-none h-28 placeholder:text-gray-600"
+                  placeholder="Detailed breakdown of the mission..."
                 />
               </div>
               <div>
-                <label className="block text-sm text-gray-400 mb-2">Priority</label>
-                <div className="flex gap-2">
+                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Priority Level & Forecast Weight</label>
+                <div className="grid grid-cols-4 gap-2">
                   {(['low', 'medium', 'high', 'critical'] as const).map(p => (
                     <button
                       key={p}
                       onClick={() => setNewMission({ ...newMission, priority: p })}
-                      className={`flex-1 px-3 py-2 rounded-lg text-sm capitalize transition-colors ${
+                      className={`py-2 rounded-lg text-xs font-bold uppercase tracking-tighter transition-all ${
                         newMission.priority === p 
-                          ? 'bg-cyan-600 text-white' 
-                          : 'bg-[#21262d] text-gray-400 hover:bg-[#30363d]'
+                          ? 'bg-cyan-600 text-white shadow-lg shadow-cyan-600/30 border-cyan-400' 
+                          : 'bg-[#21262d] text-gray-500 border border-transparent hover:border-gray-700'
                       }`}
                     >
                       {p}
@@ -361,18 +360,19 @@ export default function MissionsPage() {
                 </div>
               </div>
             </div>
-            <div className="flex justify-end gap-3 mt-6">
+
+            <div className="flex justify-end gap-3 mt-10">
               <button 
                 onClick={() => setShowNewMission(false)}
-                className="px-4 py-2 text-gray-400 hover:text-white transition-colors"
+                className="px-6 py-3 rounded-xl text-gray-400 font-semibold hover:text-white transition-colors"
               >
                 Cancel
               </button>
               <button 
                 onClick={addMission}
-                className="px-6 py-2 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white font-medium transition-colors"
+                className="px-8 py-3 rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-bold transition-all shadow-xl shadow-cyan-600/20 active:scale-95"
               >
-                Create Mission
+                Launch Mission
               </button>
             </div>
           </div>
