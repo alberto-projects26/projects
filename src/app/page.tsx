@@ -1,42 +1,56 @@
-"use client";
+'use client';
 
 import React, { useState, useEffect } from 'react';
+import { signOut } from '../lib/auth';
+import { 
+  LayoutDashboard, 
+  Target, 
+  ListTodo, 
+  Users, 
+  Zap, 
+  Cpu, 
+  Plus, 
+  ChevronRight, 
+  Search, 
+  Bell, 
+  MoreHorizontal, 
+  Clock, 
+  CheckCircle2, 
+  AlertCircle,
+  GripVertical,
+  ChevronDown,
+  ExternalLink,
+  Bot,
+  Activity,
+  History,
+  Trash2,
+  Check,
+  X,
+  ArrowRight,
+  ShieldCheck,
+  Loader2,
+  LogOut
+} from 'lucide-react';
+import { Toaster, toast } from 'react-hot-toast';
+import AuthScreen from '../components/AuthScreen';
 import { 
   DndContext, 
-  closestCenter,
-  KeyboardSensor,
-  PointerSensor,
-  useSensor,
+  closestCenter, 
+  KeyboardSensor, 
+  PointerSensor, 
+  useSensor, 
   useSensors,
   DragEndEvent
 } from '@dnd-kit/core';
-import {
-  arrayMove,
-  SortableContext,
-  sortableKeyboardCoordinates,
-  verticalListSortingStrategy,
+import { 
+  arrayMove, 
+  SortableContext, 
+  sortableKeyboardCoordinates, 
+  verticalListSortingStrategy, 
   useSortable
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { 
-  ListTodo,
-  LayoutDashboard, 
-  Target, 
-  Users, 
-  Cpu, 
-  Plus, 
-  GripVertical,
-  CheckCircle2,
-  Clock,
-  AlertTriangle,
-  XCircle,
-  Camera,
-  Monitor,
-  MapPin,
-  Zap,
-  Activity,
-  X
-} from 'lucide-react';
+import { supabase } from '../lib/supabase';
 import { 
   fetchMissions, 
   fetchAgents, 
@@ -45,315 +59,395 @@ import {
   updateMissionStatus, 
   updateTodo, 
   updateAgentStatus,
+  createMission,
+  createAgent,
+  createTodo,
+  createActionPlan,
   Mission as SupaMission,
   Agent as SupaAgent,
   Node as SupaNode,
   Todo as SupaTodo
 } from '../data/supabase';
-// import { mockMissions, mockAgents, mockNodes } from '../data/mock';
 
-// ============ RE-MAP TYPES FOR BACKEND COMPAT ============
-type Mission = SupaMission;
-type Agent = SupaAgent;
-type Node = SupaNode;
-type Todo = SupaTodo;
+// ============ TYPES ============
 
-// ============ COMPONENTS ============
+export type MissionStatus = 'backlog' | 'planning' | 'active' | 'review' | 'completed';
+export type AgentStatus = 'idle' | 'active' | 'busy' | 'retired';
+export type NodeStatus = 'online' | 'offline' | 'busy';
 
-// Sidebar
-function Sidebar({ activeView, setActiveView }: { activeView: string; setActiveView: (v: string) => void }) {
-  const nav = [
-    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-    { id: 'tracker', label: 'Todo Tracker', icon: ListTodo },
-    { id: 'missions', label: 'Missions', icon: Target },
-    { id: 'agents', label: 'Agents', icon: Users },
-    { id: 'nodes', label: 'Nodes', icon: Cpu },
-  ];
-  
-  return (
-    <nav className="fixed left-0 top-0 h-full w-64 border-r border-[#30363d] bg-[#010409] p-4 z-50">
-      <div className="flex items-center gap-2 mb-8 px-2">
-        <div className="w-6 h-6 bg-cyan-500 rounded-sm animate-pulse"></div>
-        <span className="font-bold text-white tracking-widest uppercase text-xs">Mission Control</span>
-      </div>
-      
-      <ul className="space-y-1">
-        {nav.map(item => (
-          <li key={item.id}>
-            <button 
-              onClick={() => setActiveView(item.id)}
-              className={`w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-all ${
-                activeView === item.id 
-                  ? 'bg-[#1f6feb] text-white' 
-                  : 'hover:bg-[#161b22] text-[#c9d1d9]'
-              }`}
-            >
-              <item.icon size={16} />
-              {item.label}
-            </button>
-          </li>
-        ))}
-      </ul>
-
-      <div className="absolute bottom-4 left-4 right-4 p-4 border-t border-[#30363d]">
-        <div className="flex items-center gap-2 text-xs text-[#8b949e]">
-          <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
-          Gateway Online
-        </div>
-      </div>
-    </nav>
-  );
+export interface Task {
+  id: string;
+  mission_id: string;
+  title: string;
+  description: string;
+  completed: boolean;
 }
 
-// Status Badge
+export interface ActionPlan {
+  id: string;
+  mission_id: string;
+  description: string;
+  steps: string[];
+  status: 'pending' | 'approved' | 'rejected';
+  created_at: string;
+}
+
+export interface Mission {
+  id: string;
+  title: string;
+  description: string;
+  status: MissionStatus;
+  priority: 'low' | 'medium' | 'high' | 'critical';
+  assigned_agent_id: string | null;
+  tasks: Task[];
+  action_plans: ActionPlan[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Agent {
+  id: string;
+  name: string;
+  role: string;
+  status: AgentStatus;
+  current_mission_id: string | null;
+  token_burn_24h: number;
+  capabilities: string[];
+}
+
+export interface Node {
+  id: string;
+  name: string;
+  type: 'mac-mini' | 'iphone' | 'android' | 'pi';
+  status: NodeStatus;
+  last_seen: string;
+  capabilities: string[];
+  location: string;
+}
+
+export interface Todo {
+  id: string;
+  task: string;
+  mission_id: string | null;
+  bot_id: string | null;
+  status: 'pending' | 'completed' | 'planning';
+  created_at: string;
+}
+
+// ============ UI COMPONENTS ============
+
 function StatusBadge({ status }: { status: string }) {
   const colors: Record<string, string> = {
-    online: 'bg-green-500/20 text-green-400 border-green-500/30',
-    idle: 'bg-gray-500/20 text-gray-400 border-gray-500/30',
-    active: 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30',
-    busy: 'bg-amber-500/20 text-amber-400 border-amber-500/30',
-    retired: 'bg-red-500/20 text-red-400 border-red-500/30',
-    offline: 'bg-gray-500/20 text-gray-500 border-gray-500/30',
+    online: 'bg-green-500/10 text-green-400 border-green-500/20',
+    offline: 'bg-red-500/10 text-red-400 border-red-500/20',
+    busy: 'bg-amber-500/10 text-amber-400 border-amber-500/20',
+    idle: 'bg-cyan-500/10 text-cyan-400 border-cyan-500/20',
+    active: 'bg-cyan-500/10 text-cyan-400 border-cyan-500/20',
+    backlog: 'bg-slate-500/10 text-slate-400 border-slate-500/20',
+    planning: 'bg-amber-500/10 text-amber-400 border-amber-500/20',
+    review: 'bg-purple-500/10 text-purple-400 border-purple-500/20',
+    completed: 'bg-green-500/10 text-green-400 border-green-500/20',
+    pending: 'bg-amber-500/10 text-amber-400 border-amber-500/20',
   };
+
   return (
-    <span className={`px-2 py-0.5 text-[10px] font-bold uppercase rounded border ${colors[status] || colors.idle}`}>
+    <span className={`px-2 py-0.5 text-[10px] font-black uppercase rounded border ${colors[status] || colors.idle}`}>
       {status}
     </span>
   );
 }
 
-// Priority Badge
 function PriorityBadge({ priority }: { priority: string }) {
   const colors: Record<string, string> = {
-    low: 'bg-gray-500/20 text-gray-400',
-    medium: 'bg-blue-500/20 text-blue-400',
-    high: 'bg-amber-500/20 text-amber-400',
-    critical: 'bg-red-500/20 text-red-400',
+    low: 'bg-[#161b22] text-[#8b949e] border-[#30363d]',
+    medium: 'bg-cyan-500/10 text-cyan-400 border-cyan-500/20',
+    high: 'bg-amber-500/10 text-amber-400 border-amber-500/20',
+    critical: 'bg-red-500/10 text-red-400 border-red-500/20',
   };
+
   return (
-    <span className={`px-2 py-0.5 text-[10px] font-bold uppercase rounded ${colors[priority] || colors.low}`}>
+    <span className={`px-2 py-0.5 text-[10px] font-black uppercase rounded border ${colors[priority] || colors.low}`}>
       {priority}
     </span>
   );
 }
 
-// ============ DASHBOARD ============
+// ============ MODALS ============
 
-function Dashboard({ agents, missions, nodes, todos }: { agents: Agent[]; missions: Mission[]; nodes: Node[]; todos: Todo[] }) {
-  const activeAgents = agents.filter(a => a.status !== 'retired').length;
-  const totalBurn = agents.reduce((sum, a) => sum + a.tokenBurn24h, 0);
-  const onlineNodes = nodes.filter(n => n.status === 'online').length;
-  const pendingApprovals = missions.reduce((sum, m) => 
-    sum + (m.action_plans?.filter(a => a.status === 'pending').length || 0), 0);
+function Modal({ isOpen, onClose, title, children }: { isOpen: boolean; onClose: () => void; title: string; children: React.ReactNode }) {
+  if (!isOpen) return null;
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-300">
+      <div className="bg-[#161b22] border border-[#30363d] rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl animate-in zoom-in-95 duration-300">
+        <header className="px-6 py-4 border-b border-[#30363d] flex items-center justify-between">
+          <h3 className="text-sm font-black text-white uppercase tracking-widest">{title}</h3>
+          <button onClick={onClose} className="text-[#8b949e] hover:text-white"><X size={18} /></button>
+        </header>
+        <div className="p-6">{children}</div>
+      </div>
+    </div>
+  );
+}
+
+// ============ COMMAND CENTER (DASHBOARD) ============
+
+function Dashboard({ agents = [], missions = [], nodes = [], todos = [] }: { agents: Agent[]; missions: Mission[]; nodes: Node[]; todos: Todo[] }) {
+  const activeAgents = agents?.filter(a => a.status !== 'retired').length || 0;
+  const totalBurn = agents?.reduce((sum, a) => sum + (a.token_burn_24h || 0), 0) || 0;
+  const onlineNodes = nodes?.filter(n => n.status === 'online').length || 0;
+  const pendingApprovals = missions?.reduce((sum, m) => 
+    sum + (m.action_plans?.filter(a => a.status === 'pending').length || 0), 0) || 0;
 
   const stats = [
     { label: 'Active Agents', value: activeAgents, icon: Users, color: 'text-cyan-400', glow: 'shadow-[0_0_15px_rgba(6,182,212,0.15)]' },
     { label: '24h Token Burn', value: `${(totalBurn / 1000).toFixed(1)}k`, icon: Zap, color: 'text-amber-400', glow: 'shadow-[0_0_15px_rgba(245,158,11,0.15)]' },
-    { label: 'Paired Nodes', value: onlineNodes, icon: Cpu, color: 'text-purple-400', glow: 'shadow-[0_0_15px_rgba(168,85,247,0.15)]' },
-    { label: 'Pending Approvals', value: pendingApprovals, icon: AlertTriangle, color: 'text-red-400', glow: 'shadow-[0_0_15px_rgba(239,68,68,0.15)]' },
+    { label: 'Online Nodes', value: onlineNodes, icon: Cpu, color: 'text-green-400', glow: 'shadow-[0_0_15px_rgba(34,197,94,0.15)]' },
+    { label: 'Pending Plans', value: pendingApprovals, icon: AlertCircle, color: 'text-red-400', glow: 'shadow-[0_0_15px_rgba(239,68,68,0.15)]' },
   ];
 
   return (
     <div className="space-y-8 animate-in fade-in duration-700">
-      <header className="flex justify-between items-end border-b border-[#30363d] pb-6">
+      <header className="flex items-end justify-between border-b border-[#30363d] pb-6">
         <div>
           <h1 className="text-3xl font-black text-white mb-1 tracking-tight flex items-center gap-3">
             <span className="w-1 h-8 bg-cyan-500 rounded-full"></span>
-            FLEET OVERVIEW
+            COMMAND CENTER
           </h1>
-          <p className="text-xs font-mono text-[#8b949e] uppercase tracking-[0.2em]">Operational status: Nominal</p>
+          <p className="text-xs font-mono text-[#8b949e] uppercase tracking-[0.2em]">Fleet Status / System Telemetry</p>
         </div>
         <div className="hidden lg:flex gap-4">
           <div className="text-right">
             <div className="text-[10px] font-bold text-[#8b949e] uppercase tracking-widest">Uptime</div>
             <div className="text-sm font-mono text-white">14:02:44:19</div>
           </div>
-          <div className="text-right">
-            <div className="text-[10px] font-bold text-[#8b949e] uppercase tracking-widest">Bandwidth</div>
-            <div className="text-sm font-mono text-white">2.4 GB/s</div>
-          </div>
         </div>
       </header>
 
-      {/* Stats Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {stats.map(stat => (
-          <div key={stat.label} className={`group relative p-6 rounded-xl border border-[#30363d] bg-[#161b22] overflow-hidden transition-all hover:border-[#484f58] ${stat.glow}`}>
-            {/* Design elements */}
-            <div className="absolute top-0 right-0 w-24 h-24 -mr-8 -mt-8 bg-white/5 rounded-full blur-3xl group-hover:bg-white/10 transition-colors"></div>
-            <div className="absolute bottom-0 left-0 w-1 h-0 bg-cyan-500 group-hover:h-full transition-all duration-500"></div>
-            
-            <div className="relative flex items-center justify-between mb-4">
-              <span className="text-[10px] font-black text-[#8b949e] uppercase tracking-[0.2em]">{stat.label}</span>
-              <stat.icon size={18} className={`${stat.color} group-hover:scale-110 transition-transform`} />
+          <div key={stat.label} className={`p-6 rounded-2xl border border-[#30363d] bg-[#161b22] relative overflow-hidden group ${stat.glow}`}>
+            <div className="absolute top-0 left-0 w-full h-1 bg-current opacity-20 transition-all group-hover:opacity-100" style={{ color: stat.color.split('text-')[1] }}></div>
+            <div className="flex items-center gap-4">
+              <div className={`p-3 rounded-xl bg-black/40 ${stat.color}`}>
+                <stat.icon size={24} />
+              </div>
+              <div>
+                <div className="text-[10px] font-bold text-[#8b949e] uppercase tracking-widest">{stat.label}</div>
+                <div className="text-2xl font-black text-white tracking-tight">{stat.value}</div>
+              </div>
             </div>
-            <div className="relative flex items-baseline gap-2">
-              <div className="text-5xl font-extralight text-white tracking-tighter">{stat.value}</div>
-              <div className="text-[10px] font-mono text-[#484f58] uppercase">Current</div>
-            </div>
-
-            {/* Scanning line animation */}
-            <div className="absolute inset-0 pointer-events-none opacity-0 group-hover:opacity-20 translate-y-full animate-[scan_3s_linear_infinite] bg-gradient-to-b from-transparent via-cyan-500 to-transparent h-1/2 w-full"></div>
           </div>
         ))}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Activity Feed */}
-        <section className="lg:col-span-2 p-6 rounded-xl border border-[#30363d] bg-[#0d1117] relative overflow-hidden">
-          <div className="absolute top-0 right-0 p-4 opacity-5 pointer-events-none">
-            <Activity size={120} />
+        <div className="lg:col-span-2 space-y-6">
+          <div className="p-6 rounded-2xl border border-[#30363d] bg-[#161b22] relative overflow-hidden h-[400px]">
+             <div className="flex items-center justify-between mb-8">
+               <h3 className="text-xs font-black text-white uppercase tracking-widest flex items-center gap-2">
+                 <Activity size={14} className="text-cyan-400" />
+                 Resource Utilization
+               </h3>
+               <div className="flex gap-2">
+                 {['CPU', 'MEM', 'NET'].map(label => (
+                   <span key={label} className="text-[10px] font-mono text-[#484f58] border border-[#30363d] px-2 py-0.5 rounded uppercase">{label}</span>
+                 ))}
+               </div>
+             </div>
+             <div className="h-full flex items-end gap-1 px-4 pb-12">
+               {[...Array(40)].map((_, i) => (
+                 <div key={i} className="flex-1 bg-cyan-500/20 rounded-t-sm relative group cursor-crosshair" style={{ height: `${Math.random() * 80 + 10}%` }}>
+                   <div className="absolute inset-0 bg-cyan-400 opacity-0 group-hover:opacity-40 transition-opacity rounded-t-sm"></div>
+                 </div>
+               ))}
+             </div>
           </div>
-          
-          <h3 className="text-xs font-black text-[#8b949e] uppercase mb-8 flex items-center gap-3 tracking-[0.2em]">
-            <span className="w-2 h-2 bg-cyan-500 animate-pulse rounded-full shadow-[0_0_10px_rgba(6,182,212,0.8)]"></span>
-            UNIFIED EVENT STREAM
-          </h3>
-          
-          <div className="space-y-4 font-mono">
-            {[
-              { time: '22:45:12', type: 'mission', status: 'INFO', msg: 'Mission "Build Mission Control UI" moved to Planning' },
-              { time: '22:44:03', type: 'agent', status: 'WARN', msg: 'Agent Dev-1 latency check: 142ms (Elevated)' },
-              { time: '22:43:22', type: 'approval', status: 'REQ', msg: 'Action Plan awaiting approval: "Execute web research"' },
-              { time: '22:42:00', type: 'node', status: 'SYS', msg: 'Node "Alberto\'s iPhone" authenticated (E2EE)' },
-              { time: '22:40:15', type: 'system', status: 'OK', msg: 'Secure WebSocket handshake: 101 Switching Protocols' },
-            ].map((event, i) => (
-              <div key={i} className="text-xs flex gap-6 group hover:bg-white/[0.02] p-2 -m-2 rounded transition-colors">
-                <span className="text-[#484f58] shrink-0">{event.time}</span>
-                <span className={`shrink-0 w-12 font-bold ${
-                  event.status === 'REQ' ? 'text-amber-500' : 
-                  event.status === 'WARN' ? 'text-red-500' : 
-                  'text-cyan-700'
-                }`}>[{event.status}]</span>
-                <span className="text-[#c9d1d9] group-hover:text-white transition-colors">{event.msg}</span>
-              </div>
-            ))}
-          </div>
-        </section>
+        </div>
 
-        {/* Mini Performance Radar/Chart Placeholder */}
-        <section className="p-6 rounded-xl border border-[#30363d] bg-[#161b22] flex flex-col justify-between">
-          <div>
-            <h3 className="text-xs font-black text-[#8b949e] uppercase mb-4 tracking-[0.2em]">Resource Allocation</h3>
-            <div className="space-y-4">
-              {[
-                { label: 'Compute', val: '74%', color: 'bg-cyan-500' },
-                { label: 'Memory', val: '32%', color: 'bg-purple-500' },
-                { label: 'API Quota', val: '12%', color: 'bg-amber-500' },
-              ].map(bar => (
-                <div key={bar.label}>
-                  <div className="flex justify-between text-[10px] font-bold mb-1 uppercase tracking-widest">
-                    <span className="text-[#8b949e]">{bar.label}</span>
-                    <span className="text-white">{bar.val}</span>
-                  </div>
-                  <div className="h-1 w-full bg-[#0d1117] rounded-full overflow-hidden">
-                    <div className={`h-full ${bar.color} rounded-full`} style={{ width: bar.val }}></div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-          <div className="mt-8 pt-6 border-t border-[#30363d]">
-            <div className="flex items-center gap-4">
-              <div className="flex-1">
-                <div className="text-[10px] font-bold text-[#8b949e] uppercase mb-1">Fleet Latency</div>
-                <div className="text-2xl font-light text-white tracking-tighter">24<span className="text-xs ml-1 text-[#484f58]">ms</span></div>
-              </div>
-              <div className="w-24 h-12 flex items-end gap-1">
-                {[4,7,3,8,5,9,6,8,4].map((h, i) => (
-                  <div key={i} className="flex-1 bg-cyan-500/20 w-1 rounded-t-sm animate-pulse" style={{ height: `${h * 10}%`, animationDelay: `${i * 0.1}s` }}></div>
-                ))}
-              </div>
-            </div>
-          </div>
-        </section>
+        <div className="space-y-6">
+           <div className="p-6 rounded-2xl border border-[#30363d] bg-[#161b22]">
+             <h3 className="text-xs font-black text-white uppercase tracking-widest mb-6 flex items-center gap-2">
+               <Bell size={14} className="text-amber-400" />
+               Signal Stream
+             </h3>
+             <div className="space-y-4">
+               {[
+                 { msg: 'Agent "Recon-1" completed mission: Market Scan', time: '2m ago', type: 'success' },
+                 { msg: 'Node "Mac-Mini" resource spike detected', time: '15m ago', type: 'warn' },
+                 { msg: 'System backup synchronized with Supabase', time: '44m ago', type: 'info' },
+                 { msg: 'New mission protocol initiated: Deployment A', time: '1h ago', type: 'info' },
+               ].map((signal, i) => (
+                 <div key={i} className="flex gap-4 animate-in slide-in-from-right-4 duration-500" style={{ animationDelay: `${i * 100}ms` }}>
+                    <div className="w-px bg-[#30363d] relative">
+                      <div className="absolute top-2 -left-1 w-2 h-2 rounded-full bg-[#30363d]"></div>
+                    </div>
+                    <div className="pb-4">
+                      <p className="text-xs text-[#c9d1d9] mb-1">{signal.msg}</p>
+                      <span className="text-[10px] font-mono text-[#8b949e] uppercase">{signal.time}</span>
+                    </div>
+                 </div>
+               ))}
+             </div>
+           </div>
+        </div>
       </div>
     </div>
   );
 }
 
-// ============ MISSIONS (KANBAN) ============
+// ============ MISSIONS ============
 
-const STATUS_COLUMNS: { id: MissionStatus; label: string; color: string }[] = [
-  { id: 'backlog', label: 'Backlog', color: 'text-gray-400' },
-  { id: 'planning', label: 'Planning', color: 'text-blue-400' },
-  { id: 'active', label: 'Active', color: 'text-cyan-400' },
-  { id: 'review', label: 'Review', color: 'text-amber-400' },
-  { id: 'completed', label: 'Completed', color: 'text-green-400' },
-];
+function MissionCard({ 
+  mission, 
+  agents = [], 
+  onDrillDown 
+}: { 
+  mission: Mission; 
+  agents?: Agent[];
+  onDrillDown: (m: Mission) => void;
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: mission.id });
+  const style = { 
+    transform: CSS.Transform.toString(transform), 
+    transition,
+    zIndex: isDragging ? 100 : 1,
+    opacity: isDragging ? 0.5 : 1
+  };
+  const agent = agents?.find(a => a.id === mission.assigned_agent_id);
 
-function MissionCard({ mission, agents }: { mission: Mission; agents: Agent[] }) {
-  const agent = agents.find(a => a.id === mission.assigned_agent_id);
-  
   return (
-    <div className="group p-4 rounded-xl border border-[#30363d] bg-[#161b22] hover:border-[#484f58] transition-all relative overflow-hidden cursor-grab active:cursor-grabbing">
-      {/* Accent bar */}
-      <div className={`absolute left-0 top-0 bottom-0 w-1 ${
-        mission.priority === 'critical' ? 'bg-red-500' : 
-        mission.priority === 'high' ? 'bg-amber-500' : 
-        'bg-cyan-500'
-      }`}></div>
-      
-      <div className="flex items-start justify-between mb-3">
-        <PriorityBadge priority={mission.priority} />
-        <button className="text-[#484f58] hover:text-[#c9d1d9] transition-colors">
-          <GripVertical size={14} />
-        </button>
+    <div 
+      ref={setNodeRef}
+      style={style}
+      {...attributes}
+      {...listeners}
+      onClick={(e) => {
+        onDrillDown(mission);
+      }}
+      className={`group p-4 rounded-xl border border-[#30363d] bg-[#161b22] hover:border-[#484f58] transition-all relative overflow-hidden cursor-grab active:cursor-grabbing ${
+        isDragging ? 'shadow-2xl ring-2 ring-cyan-500/50' : 'shadow-lg'
+      }`}
+    >
+      <div className="flex justify-between items-start mb-3">
+        <div className="flex gap-2">
+          <PriorityBadge priority={mission.priority} />
+          {mission.assigned_agent_id && (
+            <div className="px-2 py-0.5 text-[10px] font-black uppercase rounded border border-cyan-500/20 bg-cyan-500/10 text-cyan-400">
+              Assigned
+            </div>
+          )}
+        </div>
+        {mission.action_plans?.some(a => a.status === 'pending') && (
+          <div className="w-2 h-2 rounded-full bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.5)]"></div>
+        )}
       </div>
       
-      <h4 className="text-sm font-bold text-white mb-2 group-hover:text-cyan-400 transition-colors uppercase tracking-tight">{mission.title}</h4>
-      <p className="text-[11px] text-[#8b949e] line-clamp-2 mb-4 font-mono leading-relaxed">{mission.description}</p>
+      <h4 className="text-white font-black uppercase text-sm mb-2 tracking-tight group-hover:text-cyan-400 transition-colors">{mission.title}</h4>
+      <p className="text-[10px] text-[#8b949e] line-clamp-2 font-mono leading-relaxed mb-4">{mission.description}</p>
       
       <div className="flex items-center justify-between pt-3 border-t border-[#30363d]">
-        <div className="flex items-center gap-2">
-          <div className={`w-1.5 h-1.5 rounded-full ${agent ? 'bg-cyan-500 animate-pulse' : 'bg-gray-700'}`}></div>
-          <span className={`text-[10px] font-bold uppercase tracking-widest ${agent ? 'text-cyan-400' : 'text-[#484f58]'}`}>
-            {agent?.name || 'Unassigned'}
-          </span>
-        </div>
-        <div className="flex gap-2">
-          {mission.tasks.length > 0 && (
-            <span className="text-[10px] font-mono text-[#8b949e] flex items-center gap-1">
-              <CheckCircle2 size={10} className="text-green-500" /> {mission.tasks.length}
-            </span>
-          )}
-          {mission.actionPlans.some(a => a.status === 'pending') && (
-            <span className="text-[10px] font-mono text-amber-400 flex items-center gap-1 animate-pulse">
-              <AlertTriangle size={10} /> 1
-            </span>
-          )}
+        {agent ? (
+          <div className="flex items-center gap-2">
+            <div className={`w-2 h-2 rounded-full ${agent.status === 'active' ? 'bg-green-500 animate-pulse' : 'bg-cyan-500'}`}></div>
+            <span className="text-[9px] font-black uppercase text-white tracking-wider">{agent.name}</span>
+          </div>
+        ) : (
+          <span className="text-[9px] font-black uppercase text-[#484f58] tracking-widest">Awaiting Unit</span>
+        )}
+        <div className="text-[8px] font-mono text-[#484f58] uppercase">
+          {new Date(mission.updated_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
         </div>
       </div>
     </div>
   );
 }
 
-function Missions({ missions, setMissions, agents }: { missions: Mission[]; setMissions: (m: Mission[]) => void; agents: Agent[] }) {
-  const sensors = useSensors(
-    useSensor(PointerSensor),
-    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
-  );
+const STATUS_COLUMNS = [
+  { id: 'backlog', label: 'Backlog', color: 'text-slate-400' },
+  { id: 'planning', label: 'Planning', color: 'text-amber-400' },
+  { id: 'active', label: 'Execution', color: 'text-cyan-400' },
+  { id: 'review', label: 'Review', color: 'text-purple-400' },
+  { id: 'completed', label: 'Deployed', color: 'text-green-400' },
+] as const;
 
-  const getMissionsByStatus = (status: MissionStatus) => 
-    missions.filter(m => m.status === status);
+function Missions({ 
+  missions = [], 
+  setMissions, 
+  agents = [], 
+  onInitiate,
+  onDrillDown,
+  refreshData
+}: { 
+  missions?: Mission[]; 
+  setMissions: (m: Mission[]) => void; 
+  agents?: Agent[];
+  onInitiate: () => void;
+  onDrillDown: (m: Mission) => void;
+  refreshData: () => void;
+}) {
+  const sensors = useSensors(useSensor(PointerSensor), useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }));
 
-  const handleDragEnd = async (event: DragEndEvent, newStatus: MissionStatus) => {
+  const getMissionsByStatus = (status: MissionStatus) => {
+    const filtered = missions?.filter(m => m.status === status) || [];
+    
+    // Sort logic: Assigned Units First, then by Priority Level
+    const priorityMap: Record<string, number> = { critical: 4, high: 3, medium: 2, low: 1 };
+    
+    return [...filtered].sort((a, b) => {
+      // Rule 1: Assigned agents take precedence
+      if (a.assigned_agent_id && !b.assigned_agent_id) return -1;
+      if (!a.assigned_agent_id && b.assigned_agent_id) return 1;
+      
+      // Rule 2: Priority stacking
+      const pa = priorityMap[a.priority] || 0;
+      const pb = priorityMap[b.priority] || 0;
+      if (pa !== pb) return pb - pa;
+      
+      // Rule 3: Natural sort by creation
+      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+    });
+  };
+
+  const handleDragEnd = async (event: DragEndEvent) => {
     const { active, over } = event;
     if (!over) return;
     
     const missionId = active.id as string;
-    const oldMission = missions.find(m => m.id === missionId);
-    if (!oldMission || oldMission.status === newStatus) return;
+    const newStatus = over.id as MissionStatus;
+    
+    // Find destination status if dropped on a card instead of the column
+    let targetStatus = newStatus;
+    if (!['backlog', 'planning', 'active', 'review', 'completed'].includes(newStatus)) {
+      const targetMission = missions.find(m => m.id === over.id);
+      if (targetMission) targetStatus = targetMission.status;
+      else return;
+    }
+
+    const oldMission = missions?.find(m => m.id === missionId);
+    if (!oldMission || oldMission.status === targetStatus) return;
 
     // Optimistic update
-    setMissions(missions.map(m => m.id === missionId ? { ...m, status: newStatus } : m));
+    setMissions(missions.map(m => m.id === missionId ? { ...m, status: targetStatus } : m));
 
     try {
-      await updateMissionStatus(missionId, newStatus);
+      await updateMissionStatus(missionId, targetStatus);
+      toast.success(`Mission moved to ${targetStatus}`);
+      
+      // Auto-logic: If moved to planning and has no pending action plans, create one
+      if (targetStatus === 'planning' && (!oldMission.action_plans || oldMission.action_plans.length === 0)) {
+        await createActionPlan({
+          mission_id: missionId,
+          description: `Strategic blueprint for mission: ${oldMission.title}`,
+          steps: ["Define core objectives", "Identify required agents", "Resource allocation scan"],
+          status: 'pending'
+        });
+        toast('Drafting action plan...', { icon: '📝' });
+        refreshData();
+      }
     } catch (err) {
-      console.error('Failed to update mission status:', err);
-      // Rollback
-      setMissions(missions);
+      console.error('Drag update failed:', err);
+      toast.error('Failed to move mission.');
+      refreshData();
     }
   };
 
@@ -365,59 +459,68 @@ function Missions({ missions, setMissions, agents }: { missions: Mission[]; setM
             <span className="w-1 h-8 bg-amber-500 rounded-full"></span>
             MISSION KANBAN
           </h1>
-          <p className="text-xs font-mono text-[#8b949e] uppercase tracking-[0.2em]">Strategy Room / Deployment Hub</p>
+          <p className="text-xs font-mono text-[#8b949e] uppercase tracking-[0.2em]">Deployment Pipeline / Task Orchestration</p>
         </div>
-        <button className="group flex items-center gap-3 px-5 py-2.5 bg-[#238636] hover:bg-[#2ea043] text-white text-[10px] font-black uppercase tracking-[0.2em] rounded-md transition-all shadow-[0_0_20px_rgba(35,134,54,0.15)] active:scale-95">
+        <button 
+          onClick={onInitiate}
+          className="px-6 py-2 bg-white text-black font-black uppercase text-xs tracking-widest rounded-full hover:bg-cyan-500 hover:text-white transition-all flex items-center gap-2 group"
+        >
           <Plus size={16} className="group-hover:rotate-90 transition-transform" />
           INITIATE MISSION
         </button>
       </header>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-        {STATUS_COLUMNS.map(col => (
-          <div key={col.id} className="min-h-[600px] flex flex-col">
-            <div className={`text-[10px] font-black uppercase tracking-[0.3em] mb-6 flex items-center gap-3 p-3 rounded-lg bg-[#161b22] border border-[#30363d] ${col.color}`}>
-              <div className={`w-2 h-2 rounded-full animate-pulse shadow-[0_0_8px_currentColor] bg-current`}></div>
-              {col.label}
-              <span className="ml-auto font-mono text-[#484f58]">{getMissionsByStatus(col.id).length}</span>
-            </div>
-            
-            <DndContext 
-              sensors={sensors}
-              collisionDetection={closestCenter}
-              onDragEnd={(e) => handleDragEnd(e, col.id)}
-            >
-              <SortableContext 
-                items={getMissionsByStatus(col.id).map(m => m.id)}
-                strategy={verticalListSortingStrategy}
-              >
-                <div className="space-y-3 flex-1 px-1">
-                  {getMissionsByStatus(col.id).map(mission => (
-                    <MissionCard key={mission.id} mission={mission} />
-                  ))}
-                  {getMissionsByStatus(col.id).length === 0 && (
-                    <div className="h-24 rounded-xl border border-dashed border-[#30363d] flex items-center justify-center text-[10px] font-black text-[#30363d] uppercase tracking-widest">
-                      Empty Sector
-                    </div>
-                  )}
-                </div>
+      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+          {STATUS_COLUMNS.map(col => (
+            <div key={col.id} className="min-h-[600px] flex flex-col">
+              <div className={`text-[10px] font-black uppercase tracking-[0.3em] mb-6 flex items-center gap-3 p-3 rounded-lg bg-[#161b22] border border-[#30363d] ${col.color}`}>
+                <div className={`w-2 h-2 rounded-full animate-pulse shadow-[0_0_8px_currentColor] bg-current`}></div>
+                {col.label}
+                <span className="ml-auto font-mono text-[#484f58]">{getMissionsByStatus(col.id).length}</span>
+              </div>
+              
+              <SortableContext items={getMissionsByStatus(col.id).map(m => m.id)} strategy={verticalListSortingStrategy}>
+                <DroppableColumn id={col.id}>
+                  <div className="space-y-3 flex-1 px-1">
+                    {getMissionsByStatus(col.id).map(mission => (
+                      <MissionCard 
+                        key={mission.id} 
+                        mission={mission} 
+                        agents={agents} 
+                        onDrillDown={onDrillDown}
+                      />
+                    ))}
+                    {getMissionsByStatus(col.id).length === 0 && (
+                      <div className="h-24 rounded-xl border border-dashed border-[#30363d] flex items-center justify-center text-[10px] font-black text-[#30363d] uppercase tracking-widest">
+                        Empty Sector
+                      </div>
+                    )}
+                  </div>
+                </DroppableColumn>
               </SortableContext>
-            </DndContext>
-          </div>
-        ))}
-      </div>
+            </div>
+          ))}
+        </div>
+      </DndContext>
     </div>
   );
 }
 
-// ============ AGENTS ============
+import { useDroppable } from '@dnd-kit/core';
 
-function AgentCard({ agent, onRetire }: { agent: Agent; onRetire: (id: string) => void }) {
-  const mission = missions.find(m => m.id === agent.current_mission_id);
+function DroppableColumn({ id, children }: { id: string; children: React.ReactNode }) {
+  const { setNodeRef } = useDroppable({ id });
+  return <div ref={setNodeRef} className="flex-1 flex flex-col">{children}</div>;
+}
+
+// ============ FLEET HANGAR (AGENTS) ============
+
+function AgentCard({ agent, onRetire, missions = [] }: { agent: Agent; onRetire: (id: string) => void; missions?: Mission[] }) {
+  const mission = missions?.find(m => m.id === agent.current_mission_id);
   
   return (
     <div className="group relative p-6 rounded-xl border border-[#30363d] bg-[#161b22] hover:border-[#484f58] transition-all overflow-hidden shadow-[0_0_15px_rgba(0,0,0,0.2)]">
-      {/* Design accents */}
       <div className="absolute top-0 right-0 w-32 h-32 -mr-16 -mt-16 bg-white/5 rounded-full blur-3xl group-hover:bg-cyan-500/10 transition-colors"></div>
       
       <div className="flex items-start justify-between mb-6 relative">
@@ -432,53 +535,57 @@ function AgentCard({ agent, onRetire }: { agent: Agent; onRetire: (id: string) =
         </div>
         <StatusBadge status={agent.status} />
       </div>
-      
-      <div className="space-y-3 mb-6 relative font-mono text-[11px]">
-        <div className="flex justify-between items-center border-b border-white/[0.03] pb-2">
-          <span className="text-[#8b949e] uppercase tracking-tighter">Mission</span>
-          <span className="text-cyan-400">{mission?.title ? mission.title.substring(0, 15) + '...' : 'IDLE'}</span>
+
+      <div className="space-y-4 relative">
+        <div className="flex items-center justify-between p-3 rounded-lg bg-[#0d1117] border border-[#30363d]">
+          <div className="flex items-center gap-2">
+            <Zap size={14} className="text-amber-400" />
+            <span className="text-[10px] font-bold text-[#8b949e] uppercase tracking-widest">24h Burn</span>
+          </div>
+          <span className="text-white">{(agent.token_burn_24h || 0).toLocaleString()} TK</span>
         </div>
-        <div className="flex justify-between items-center border-b border-white/[0.03] pb-2">
-          <span className="text-[#8b949e] uppercase tracking-tighter">Energy/Burn</span>
-          <span className="text-white">{agent.tokenBurn24h.toLocaleString()} TK</span>
-        </div>
-        <div className="flex justify-between items-center">
-          <span className="text-[#8b949e] uppercase tracking-tighter">Uptime</span>
-          <span className="text-white">82h 14m</span>
+
+        <div className="flex items-center justify-between p-3 rounded-lg bg-[#0d1117] border border-[#30363d]">
+          <div className="flex items-center gap-2">
+            <Target size={14} className="text-cyan-400" />
+            <span className="text-[10px] font-bold text-[#8b949e] uppercase tracking-widest">Assignment</span>
+          </div>
+          <span className="text-[10px] text-white font-mono uppercase truncate max-w-[120px]">{mission?.title || 'None'}</span>
         </div>
       </div>
 
-      <div className="flex flex-wrap gap-1.5 mb-6 relative">
+      <div className="mt-6 flex flex-wrap gap-2">
         {agent.capabilities.map(cap => (
-          <span key={cap} className="px-2 py-1 text-[9px] font-black bg-[#0d1117] text-[#484f58] rounded border border-[#30363d] uppercase tracking-tighter group-hover:border-cyan-500/30 group-hover:text-cyan-700 transition-all">
-            {cap}
-          </span>
+          <span key={cap} className="px-2 py-1 rounded-md bg-white/5 text-[10px] font-mono text-[#c9d1d9] uppercase border border-white/5">{cap}</span>
         ))}
       </div>
 
-      {agent.status !== 'retired' && (
-        <button 
-          onClick={() => onRetire(agent.id)}
-          className="relative w-full py-2.5 text-[10px] font-black uppercase tracking-[0.2em] text-red-500/50 border border-red-500/20 hover:border-red-500 hover:text-red-500 hover:bg-red-500/5 rounded-md transition-all active:scale-95"
-        >
-          DECOMMISSION AGENT
-        </button>
-      )}
+      <div className="mt-8 pt-6 border-t border-[#30363d] flex gap-3">
+        <button className="flex-1 px-4 py-2 rounded-lg bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 text-[10px] font-black uppercase tracking-widest hover:bg-cyan-500 hover:text-white transition-all">Command</button>
+        {agent.status !== 'retired' && (
+          <button onClick={() => onRetire(agent.id)} className="p-2 rounded-lg bg-red-500/10 text-red-400 border border-red-500/20 hover:bg-red-500 hover:text-white transition-all"><Trash2 size={16} /></button>
+        )}
+      </div>
     </div>
   );
 }
 
-function Agents({ agents, setAgents, missions }: { agents: Agent[]; setAgents: (a: Agent[]) => void; missions: Mission[] }) {
+function Agents({ agents = [], setAgents, missions = [], onConstruct }: { agents?: Agent[]; setAgents: (a: Agent[]) => void; missions?: Mission[]; onConstruct: () => void }) {
   const handleRetire = async (id: string) => {
-    // Optimistic update
-    setAgents(agents.map(a => a.id === id ? { ...a, status: 'retired' as const } : a));
+    const agent = agents.find(a => a.id === id);
+    if (!agent) return;
     
-    try {
-      await updateAgentStatus(id, 'retired');
-    } catch (err) {
-      console.error('Failed to retire agent:', err);
-      // Rollback
-      setAgents(agents);
+    if (!window.confirm(`Are you certain you want to retire unit "${agent.name}"? This will terminate all active processes.`)) {
+      return;
+    }
+
+    setAgents(agents.map(a => a.id === id ? { ...a, status: 'retired' as const } : a));
+    try { 
+      await updateAgentStatus(id, 'retired'); 
+      toast.success(`Agent ${agent.name} retired.`);
+    } catch (err) { 
+      toast.error('Failed to retire agent.');
+      setAgents(agents); 
     }
   };
 
@@ -487,100 +594,57 @@ function Agents({ agents, setAgents, missions }: { agents: Agent[]; setAgents: (
       <header className="flex items-end justify-between border-b border-[#30363d] pb-6">
         <div>
           <h1 className="text-3xl font-black text-white mb-1 tracking-tight flex items-center gap-3">
-            <span className="w-1 h-8 bg-purple-500 rounded-full"></span>
+            <span className="w-1 h-8 bg-cyan-500 rounded-full"></span>
             FLEET HANGAR
           </h1>
-          <p className="text-xs font-mono text-[#8b949e] uppercase tracking-[0.2em]">Agent Registry / Resource Control</p>
+          <p className="text-xs font-mono text-[#8b949e] uppercase tracking-[0.2em]">Agent Lifecycle / Roster Control</p>
         </div>
-        <button className="flex items-center gap-3 px-5 py-2.5 bg-cyan-600 hover:bg-cyan-500 text-white text-[10px] font-black uppercase tracking-[0.2em] rounded-md transition-all shadow-[0_0_20px_rgba(6,182,212,0.15)] active:scale-95">
-          <Plus size={16} />
+        <button 
+          onClick={onConstruct}
+          className="px-6 py-2 bg-white text-black font-black uppercase text-xs tracking-widest rounded-full hover:bg-cyan-500 hover:text-white transition-all flex items-center gap-2 group"
+        >
+          <Plus size={16} className="group-hover:rotate-90 transition-transform" />
           CONSTRUCT AGENT
         </button>
       </header>
-
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
         {agents.map(agent => (
-          <AgentCard key={agent.id} agent={agent} onRetire={handleRetire} />
+          <AgentCard key={agent.id} agent={agent} onRetire={handleRetire} missions={missions} />
         ))}
       </div>
     </div>
   );
 }
 
-// ============ NODES ============
-
-function NodeActions({ nodeId }: { nodeId: string }) {
-  const [action, setAction] = useState<string | null>(null);
-  
-  const actions = [
-    { id: 'camera', label: 'CAM SNAP', icon: Camera },
-    { id: 'screen', label: 'SCR REC', icon: Monitor },
-    { id: 'location', label: 'GPS LOC', icon: MapPin },
-  ];
-
-  const handleAction = async (actionId: string) => {
-    setAction(actionId);
-    setTimeout(() => setAction(null), 2000);
-  };
-
-  return (
-    <div className="flex gap-2 mt-6">
-      {actions.map(act => (
-        <button
-          key={act.id}
-          onClick={() => handleAction(act.id)}
-          disabled={!!action}
-          className={`flex-1 py-2 text-[9px] font-black border transition-all flex flex-col items-center justify-center gap-2 rounded-md ${
-            action === act.id
-              ? 'bg-cyan-500/20 border-cyan-500 text-cyan-400 shadow-[0_0_15px_rgba(6,182,212,0.2)]'
-              : 'border-[#30363d] bg-[#0d1117] text-[#8b949e] hover:border-cyan-500/50 hover:text-white'
-          }`}
-        >
-          {action === act.id ? (
-            <Activity size={14} className="animate-spin" />
-          ) : (
-            <act.icon size={14} />
-          )}
-          <span className="tracking-widest">{act.label}</span>
-        </button>
-      ))}
-    </div>
-  );
-}
+// ============ NODE NETWORK ============
 
 function NodeCard({ node }: { node: Node }) {
   return (
-    <div className="group relative p-6 rounded-xl border border-[#30363d] bg-[#161b22] hover:border-[#484f58] transition-all overflow-hidden">
-      <div className="flex items-start justify-between mb-6">
-        <div>
-          <h4 className="text-white font-black uppercase tracking-tight group-hover:text-cyan-400 transition-colors">{node.name}</h4>
-          <p className="text-[10px] font-mono text-[#8b949e] uppercase tracking-widest">{node.type}</p>
+    <div className="group relative p-6 rounded-xl border border-[#30363d] bg-[#161b22] hover:border-[#484f58] transition-all overflow-hidden shadow-[0_0_15px_rgba(0,0,0,0.2)]">
+      <div className="flex items-center justify-between mb-8">
+        <div className="p-3 rounded-xl bg-[#0d1117] border border-[#30363d] text-[#c9d1d9] group-hover:text-red-500 group-hover:shadow-[0_0_20px_rgba(239,68,68,0.2)] transition-all">
+          <Cpu size={24} />
         </div>
         <StatusBadge status={node.status} />
       </div>
-
-      <div className="space-y-3 font-mono text-[11px]">
-        <div className="flex justify-between items-center border-b border-white/[0.03] pb-2">
-          <span className="text-[#8b949e] uppercase tracking-tighter">Vector/Location</span>
-          <span className="text-white">{node.location || 'UNKNOWN'}</span>
+      <h4 className="text-white font-black uppercase text-lg mb-1 tracking-tight">{node.name}</h4>
+      <p className="text-[10px] font-mono text-[#8b949e] uppercase mb-6">{node.type} • {node.location}</p>
+      <div className="space-y-3">
+        <div className="flex gap-1 h-1">
+          {[...Array(20)].map((_, i) => (
+            <div key={i} className={`flex-1 rounded-full ${node.status === 'online' ? (i < 14 ? 'bg-red-500' : 'bg-[#30363d]') : 'bg-white/5'}`}></div>
+          ))}
         </div>
-        <div className="flex justify-between items-center">
-          <span className="text-[#8b949e] uppercase tracking-tighter">Sync Log</span>
-          <span className="text-white">{new Date(node.lastSeen).toLocaleTimeString()}</span>
+        <div className="flex justify-between text-[8px] font-black text-[#484f58] uppercase tracking-widest">
+          <span>Processing Load</span>
+          <span>72%</span>
         </div>
       </div>
-
-      {node.status === 'online' && <NodeActions nodeId={node.id} />}
-      {node.status === 'offline' && (
-        <div className="mt-6 py-4 rounded-md bg-[#0d1117] border border-dashed border-[#30363d] flex items-center justify-center text-[10px] font-black text-[#30363d] uppercase tracking-[0.2em]">
-          Connection Severed
-        </div>
-      )}
     </div>
   );
 }
 
-function Nodes({ nodes }: { nodes: Node[] }) {
+function Nodes({ nodes = [] }: { nodes: Node[] }) {
   return (
     <div className="space-y-8 animate-in fade-in duration-700">
       <header className="flex items-end justify-between border-b border-[#30363d] pb-6">
@@ -591,14 +655,7 @@ function Nodes({ nodes }: { nodes: Node[] }) {
           </h1>
           <p className="text-xs font-mono text-[#8b949e] uppercase tracking-[0.2em]">Peripheral Control / Hardware Grid</p>
         </div>
-        <div className="flex gap-4">
-          <div className="text-right">
-            <div className="text-[10px] font-bold text-[#8b949e] uppercase tracking-widest">Active Channels</div>
-            <div className="text-sm font-mono text-white">08/12</div>
-          </div>
-        </div>
       </header>
-
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {nodes.map(node => (
           <NodeCard key={node.id} node={node} />
@@ -608,206 +665,171 @@ function Nodes({ nodes }: { nodes: Node[] }) {
   );
 }
 
-// ============ TODO TRACKER ============
+// ============ ACTIVITY LOG ============
 
-interface TodoTask {
-  id: string;
-  task: string;
-  missionId?: string;
-  botId?: string;
-  createdAt: string;
-  status: 'pending' | 'completed' | 'planning';
-}
-
-function SortableTodoRow({ todo, agents, missions }: { todo: TodoTask; agents: Agent[]; missions: Mission[] }) {
-  const {
-    attributes,
-    listeners,
-    setNodeRef,
-    transform,
-    transition,
-  } = useSortable({ id: todo.id });
-
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-  };
-
-  const bot = agents.find(a => a.id === todo.botId);
-  const mission = missions.find(m => m.id === todo.missionId);
+function ActivityRow({ todo, agents, missions, onToggle }: { todo: Todo; agents: Agent[]; missions: Mission[]; onToggle: (id: string) => void }) {
+  const { attributes, listeners, setNodeRef, transform, transition } = useSortable({ id: todo.id });
+  const style = { transform: CSS.Transform.toString(transform), transition };
+  const bot = agents?.find(a => a.id === todo.bot_id);
+  const mission = missions?.find(m => m.id === todo.mission_id);
 
   return (
-    <tr 
-      ref={setNodeRef} 
-      style={style} 
-      className="group hover:bg-white/[0.02] transition-colors border-b border-[#30363d] last:border-0"
-    >
+    <tr ref={setNodeRef} style={style} className="group hover:bg-white/[0.02] transition-colors border-b border-[#30363d] last:border-0">
       <td className="px-6 py-4">
         <div className="flex items-center gap-3">
-          <button {...attributes} {...listeners} className="text-[#30363d] hover:text-[#8b949e] cursor-grab active:cursor-grabbing">
-            <GripVertical size={14} />
-          </button>
-          <span className="text-white font-bold tracking-tight uppercase group-hover:text-cyan-400 transition-colors whitespace-nowrap overflow-hidden text-ellipsis max-w-[200px]">
-            {todo.task}
-          </span>
+          <button {...attributes} {...listeners} className="text-[#30363d] hover:text-[#8b949e] cursor-grab active:cursor-grabbing"><GripVertical size={14} /></button>
+          <span className="text-white font-bold tracking-tight uppercase group-hover:text-cyan-400 transition-colors whitespace-nowrap overflow-hidden text-ellipsis max-w-[200px]">{todo.task}</span>
         </div>
       </td>
-      <td className="px-6 py-4">
-        <span className="text-[10px] font-black uppercase text-[#8b949e] tracking-widest">
-          {mission?.title || 'N/A'}
-        </span>
-      </td>
+      <td className="px-6 py-4"><span className="text-[10px] font-black uppercase text-[#8b949e] tracking-widest">{mission?.title || 'N/A'}</span></td>
       <td className="px-6 py-4">
         <div className="flex items-center gap-2">
-          {bot ? (
-            <>
-              <div className="w-1.5 h-1.5 rounded-full bg-cyan-500 animate-pulse"></div>
-              <span className="text-[10px] font-black uppercase text-cyan-400 tracking-widest">{bot.name}</span>
-            </>
-          ) : (
-            <span className="text-[10px] font-black uppercase text-[#484f58] tracking-widest">Unassigned</span>
-          )}
+          {bot ? (<><div className="w-1.5 h-1.5 rounded-full bg-cyan-500 animate-pulse"></div><span className="text-[10px] font-black uppercase text-cyan-400 tracking-widest">{bot.name}</span></>) : (<span className="text-[10px] font-black uppercase text-[#484f58] tracking-widest">Unassigned</span>)}
         </div>
       </td>
-      <td className="px-6 py-4 text-[10px] font-mono text-[#8b949e]">
-        {new Date(todo.createdAt).toLocaleDateString()}
-      </td>
-      <td className="px-6 py-4 text-right">
-        <StatusBadge status={todo.status} />
-      </td>
+      <td className="px-6 py-4 text-[10px] font-mono text-[#8b949e]">{new Date(todo.created_at).toLocaleDateString()}</td>
+      <td className="px-6 py-4 text-right"><StatusBadge status={todo.status} /></td>
     </tr>
   );
 }
 
-function TodoTracker({ todos, setTodos, agents, missions }: { todos: Todo[]; setTodos: (t: Todo[]) => void; agents: Agent[]; missions: Mission[] }) {
+function ActivityLog({ todos, setTodos, agents, missions, onNewActivity }: { todos: Todo[]; setTodos: (t: Todo[]) => void; agents: Agent[]; missions: Mission[]; onNewActivity: () => void }) {
   const activeTodos = todos.filter(t => t.status !== 'completed');
   const completedTodos = todos.filter(t => t.status === 'completed');
-
-  const sensors = useSensors(
-    useSensor(PointerSensor),
-    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
-  );
-
-  const handleDragEnd = async (event: DragEndEvent) => {
-    const { active, over } = event;
-    if (active.id !== over?.id) {
-      const oldIndex = todos.findIndex((i) => i.id === active.id);
-      const newIndex = todos.findIndex((i) => i.id === over?.id);
-      const newTodos = arrayMove(todos, oldIndex, newIndex);
-      
-      // Optimistic update
-      setTodos(newTodos);
-      
-      try {
-        // In a real app, you'd save the order index to the DB
-        // For now we'll just update the item to trigger a change
-        await updateTodo(active.id as string, { status: 'pending' });
-      } catch (err) {
-        console.error('Failed to update todo order:', err);
-        // Rollback
-        setTodos(todos);
-      }
-    }
-  };
-
-  const TableHeader = () => (
-    <thead className="bg-[#0d1117] border-b border-[#30363d] text-[#8b949e] font-black uppercase text-[10px] tracking-[0.2em]">
-      <tr>
-        <th className="px-6 py-5">Objective</th>
-        <th className="px-6 py-5">Mission</th>
-        <th className="px-6 py-5">Bot</th>
-        <th className="px-6 py-5">Created</th>
-        <th className="px-6 py-5 text-right">Status</th>
-      </tr>
-    </thead>
-  );
+  const sensors = useSensors(useSensor(PointerSensor), useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }));
 
   return (
-    <div className="space-y-12 animate-in fade-in duration-700">
+    <div className="space-y-8 animate-in fade-in duration-700">
       <header className="flex items-end justify-between border-b border-[#30363d] pb-6">
         <div>
           <h1 className="text-3xl font-black text-white mb-1 tracking-tight flex items-center gap-3">
             <span className="w-1 h-8 bg-cyan-500 rounded-full"></span>
-            TODO TRACKER
+            ACTIVITY LOG
           </h1>
-          <p className="text-xs font-mono text-[#8b949e] uppercase tracking-[0.2em]">Prioritize and Track Task Execution</p>
+          <p className="text-xs font-mono text-[#8b949e] uppercase tracking-[0.2em]">Mission Tasks / Agent Activity Stream</p>
         </div>
+        <button 
+          onClick={onNewActivity}
+          className="px-6 py-2 bg-white text-black font-black uppercase text-xs tracking-widest rounded-full hover:bg-cyan-500 hover:text-white transition-all flex items-center gap-2 group"
+        >
+          <Plus size={16} className="group-hover:rotate-90 transition-transform" />
+          NEW ACTIVITY
+        </button>
       </header>
 
-      {/* Active Tasks Table */}
-      <section>
-        <h3 className="text-[10px] font-black uppercase tracking-[0.3em] mb-4 flex items-center gap-3 text-cyan-400">
-          <div className="w-2 h-2 rounded-full animate-pulse bg-cyan-500 shadow-[0_0_8px_rgba(6,182,212,0.8)]"></div>
-          Active Operations
-          <span className="ml-auto font-mono text-[#484f58]">{activeTodos.length}</span>
-        </h3>
-        <div className="rounded-xl border border-[#30363d] bg-[#161b22] overflow-hidden shadow-[0_0_20px_rgba(0,0,0,0.3)]">
-          <DndContext 
-            sensors={sensors}
-            collisionDetection={closestCenter}
-            onDragEnd={handleDragEnd}
-          >
-            <table className="w-full text-left font-mono">
-              <TableHeader />
-              <SortableContext 
-                items={activeTodos.map(t => t.id)}
-                strategy={verticalListSortingStrategy}
-              >
-                <tbody className="">
-                  {activeTodos.map(todo => (
-                    <SortableTodoRow key={todo.id} todo={todo} agents={agents} missions={missions} />
-                  ))}
-                  {activeTodos.length === 0 && (
-                    <tr>
-                      <td colSpan={5} className="px-8 py-10 text-center text-[10px] font-black text-[#30363d] uppercase tracking-[0.2em]">
-                        All current objectives achieved
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
+      <div className="rounded-2xl border border-[#30363d] bg-[#161b22] overflow-hidden">
+        <table className="w-full text-left border-collapse">
+          <thead>
+            <tr className="bg-black/20 text-[10px] font-black uppercase text-[#484f58] tracking-widest border-b border-[#30363d]">
+              <th className="px-6 py-4">Descriptor</th>
+              <th className="px-6 py-4">Mission Source</th>
+              <th className="px-6 py-4">Assigned Unit</th>
+              <th className="px-6 py-4">Timestamp</th>
+              <th className="px-6 py-4 text-right">State</th>
+            </tr>
+          </thead>
+          <tbody>
+            <DndContext sensors={sensors} collisionDetection={closestCenter}>
+              <SortableContext items={activeTodos.map(t => t.id)} strategy={verticalListSortingStrategy}>
+                {activeTodos.map(todo => (
+                  <ActivityRow key={todo.id} todo={todo} agents={agents} missions={missions} onToggle={(id) => {}} />
+                ))}
               </SortableContext>
-            </table>
-          </DndContext>
-        </div>
-      </section>
+            </DndContext>
+          </tbody>
+        </table>
+      </div>
 
-      {/* Completed Tasks Table */}
-      <section>
-        <h3 className="text-[10px] font-black uppercase tracking-[0.3em] mb-4 flex items-center gap-3 text-green-500">
-          <CheckCircle2 size={12} />
-          Terminal Phase / Archived
-          <span className="ml-auto font-mono text-[#484f58]">{completedTodos.length}</span>
-        </h3>
-        <div className="rounded-xl border border-[#30363d] bg-[#010409] overflow-hidden opacity-60 hover:opacity-100 transition-opacity">
-          <table className="w-full text-left font-mono grayscale hover:grayscale-0 transition-all">
-            <TableHeader />
-            <tbody className="divide-y divide-[#30363d]">
-              {completedTodos.map(todo => (
-                <tr key={todo.id} className="group border-b border-[#30363d] last:border-0">
-                  <td className="px-6 py-4">
-                    <span className="text-[#8b949e] font-bold tracking-tight uppercase line-through flex items-center gap-3">
-                      <div className="w-3.5" /> {/* Spacer for grip icon alignment */}
-                      {todo.task}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4">
-                    <span className="text-[10px] font-black uppercase text-[#484f58] tracking-widest">{missions.find(m => m.id === todo.mission_id)?.title || 'N/A'}</span>
-                  </td>
-                  <td className="px-6 py-4 text-[10px] font-black uppercase text-[#484f58] tracking-widest">
-                    {agents.find(a => a.id === todo.bot_id)?.name || 'N/A'}
-                  </td>
-                  <td className="px-6 py-4 text-[10px] font-mono text-[#484f58]">
-                    {new Date(todo.createdAt).toLocaleDateString()}
-                  </td>
-                  <td className="px-6 py-4 text-right">
-                    <StatusBadge status="completed" />
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+       <div className="mt-12 space-y-6">
+          <h3 className="text-xs font-black text-[#484f58] uppercase tracking-[0.2em] px-6">Archive / Executed Tasks</h3>
+          <div className="rounded-2xl border border-[#30363d] bg-black/20 overflow-hidden grayscale opacity-50">
+            <table className="w-full text-left border-collapse">
+              <tbody>
+                {completedTodos.map(todo => (
+                  <tr key={todo.id} className="border-b border-[#30363d] last:border-0 hover:bg-white/5 transition-colors">
+                    <td className="px-6 py-4 text-sm font-bold text-[#484f58] uppercase tracking-tight line-through">{todo.task}</td>
+                    <td className="px-6 py-4 text-[10px] font-black uppercase text-[#484f58] tracking-widest">{missions.find(m => m.id === todo.mission_id)?.title || 'N/A'}</td>
+                    <td className="px-6 py-4 text-[10px] font-black uppercase text-[#484f58] tracking-widest">{agents.find(a => a.id === todo.bot_id)?.name || 'N/A'}</td>
+                    <td className="px-6 py-4 text-[10px] font-mono text-[#484f58]">{new Date(todo.created_at).toLocaleDateString()}</td>
+                    <td className="px-6 py-4 text-right"><StatusBadge status="completed" /></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+       </div>
+    </div>
+  );
+}
+
+// ============ SIDEBAR ============
+
+function Sidebar({ activeView, setActiveView, user }: { activeView: string; setActiveView: (v: string) => void; user: any }) {
+  const nav = [
+    { id: 'dashboard', label: 'Command Center', icon: LayoutDashboard, href: '/' },
+    { id: 'missions', label: 'Missions', icon: Target, href: '/?view=missions' },
+    { id: 'tracker', label: 'Activity Log', icon: ListTodo, href: '/?view=tracker' },
+    { id: 'agents', label: 'Fleet Hangar', icon: Users, href: '/?view=agents' },
+    { id: 'nodes', label: 'Node Network', icon: Cpu, href: '/?view=nodes' },
+  ];
+
+  const handleNav = (id: string, href: string) => {
+    setActiveView(id);
+    window.history.pushState({ view: id }, '', href);
+  };
+
+  return (
+    <div className="fixed left-0 top-0 h-screen w-64 bg-[#0d1117] border-r border-[#30363d] flex flex-col p-6 z-[80]">
+      <div className="flex items-center gap-3 mb-12 px-2">
+        <div className="w-10 h-10 bg-cyan-500 rounded-lg flex items-center justify-center text-black">
+          <ShieldCheck size={28} strokeWidth={2.5} />
         </div>
-      </section>
+        <div>
+          <div className="text-sm font-black text-white leading-none uppercase tracking-widest">Jarvis</div>
+          <div className="text-[10px] font-bold text-cyan-500 uppercase tracking-[0.2em] mt-1">OS / CORE-V2</div>
+        </div>
+      </div>
+      
+      <nav className="flex-1 space-y-2">
+        <ul className="space-y-1">
+          {nav.map(item => (
+            <li key={item.id}>
+              <button onClick={() => handleNav(item.id, item.href)} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${activeView === item.id ? 'bg-cyan-500/10 text-cyan-400 border border-cyan-400/20' : 'hover:bg-[#161b22] text-[#8b949e] border border-transparent'}`}>
+                <item.icon size={16} />
+                {item.label}
+              </button>
+            </li>
+          ))}
+        </ul>
+      </nav>
+
+      <div className="mt-auto space-y-4">
+        <div className="p-4 rounded-xl bg-[#161b22] border border-[#30363d]">
+           <div className="flex items-center justify-between mb-3 text-[10px] font-bold text-[#8b949e] uppercase tracking-widest">
+             <span>System Load</span>
+             <span className="text-cyan-400">0.82ms</span>
+           </div>
+           <div className="w-full bg-[#30363d] h-1 rounded-full overflow-hidden">
+             <div className="bg-cyan-400 h-full w-2/3 shadow-[0_0_8px_rgba(34,211,238,0.5)]"></div>
+           </div>
+        </div>
+        <div className="flex items-center gap-3 px-2">
+          <div className="w-8 h-8 rounded-full bg-slate-800 border border-[#30363d] flex items-center justify-center text-white text-xs font-black">
+            {user?.email?.charAt(0).toUpperCase() || 'U'}
+          </div>
+          <div>
+            <div className="text-[10px] font-black text-white uppercase tracking-tight">{user?.email?.split('@')[0] || 'User'}</div>
+            <div className="text-[8px] font-mono text-[#8b949e] uppercase tracking-widest">Commander</div>
+          </div>
+          <button 
+            onClick={() => signOut()} 
+            className="ml-auto text-[#8b949e] hover:text-red-400 p-1"
+            title="Sign Out"
+          >
+            <LogOut size={14} />
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -815,86 +837,371 @@ function TodoTracker({ todos, setTodos, agents, missions }: { todos: Todo[]; set
 // ============ MAIN APP ============
 
 export default function Home() {
-  const [activeView, setActiveView] = useState('dashboard');
+  const getInitialView = () => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const view = params.get('view');
+      if (view && ['dashboard', 'tracker', 'missions', 'agents', 'nodes'].includes(view)) return view;
+    }
+    return 'dashboard';
+  };
+
+  const [activeView, setActiveView] = useState(getInitialView);
   const [missions, setMissions] = useState<Mission[]>([]);
   const [agents, setAgents] = useState<Agent[]>([]);
   const [nodes, setNodes] = useState<Node[]>([]);
   const [todos, setTodos] = useState<Todo[]>([]);
   const [loading, setLoading] = useState(true);
+  const [user, setUser] = useState<any>(null);
+  const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Fetch data from Supabase on mount
-  React.useEffect(() => {
-    async function loadData() {
-      try {
-        const [missionsData, agentsData, nodesData, todosData] = await Promise.all([
-          fetchMissions(),
-          fetchAgents(),
-          fetchNodes(),
-          fetchTodos()
-        ]);
-        setMissions(missionsData);
-        setAgents(agentsData);
-        setNodes(nodesData);
-        setTodos(todosData);
-      } catch (err) {
-        console.error('Failed to load data:', err);
-        setError('Failed to connect to database. Using offline mode.');
-      } finally {
-        setLoading(false);
-      }
-    }
-    loadData();
+  // Modal states
+  const [showCreateMission, setShowCreateMission] = useState(false);
+  const [showCreateAgent, setShowCreateAgent] = useState(false);
+  const [showCreateActivity, setShowCreateActivity] = useState(false);
+  const [detailMission, setDetailMission] = useState<Mission | null>(null);
+
+  useEffect(() => {
+    // Check auth state
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      setUser(user);
+      setLoading(false);
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null);
+    });
+
+    return () => subscription.unsubscribe();
   }, []);
 
-  // Refresh data helper
-  const refreshData = async () => {
-    setLoading(true);
-    try {
-      const [missionsData, agentsData, nodesData, todosData] = await Promise.all([
-        fetchMissions(),
-        fetchAgents(),
-        fetchNodes(),
-        fetchTodos()
-      ]);
-      setMissions(missionsData);
-      setAgents(agentsData);
-      setNodes(nodesData);
-      setTodos(todosData);
-    } catch (err) {
-      console.error('Failed to refresh data:', err);
-    } finally {
-      setLoading(false);
+  useEffect(() => {
+    if (!user) return; // Don't load data if not authenticated
+
+    async function loadData() {
+      try {
+        const [mData, aData, nData, tData] = await Promise.all([fetchMissions(), fetchAgents(), fetchNodes(), fetchTodos()]);
+        setMissions(mData); setAgents(aData); setNodes(nData); setTodos(tData);
+      } catch (err) {
+        console.error('Failed to load data:', err);
+        setError('Database Connection Unavailable.');
+      } finally { setLoading(false); }
     }
+    loadData();
+
+    // Set up real-time subscriptions
+    const channel = supabase
+      .channel('db-changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'missions' }, () => { refreshData(); })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'agents' }, () => { refreshData(); })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'nodes' }, () => { refreshData(); })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'todos' }, () => { refreshData(); })
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, []);
+
+  const refreshData = async () => {
+    try {
+      const [m, a, n, t] = await Promise.all([fetchMissions(), fetchAgents(), fetchNodes(), fetchTodos()]);
+      setMissions(m); setAgents(a); setNodes(n); setTodos(t);
+    } catch (e) { console.error(e); }
   };
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-[#0d1117] text-[#c9d1d9] flex items-center justify-center">
-        <div className="text-center">
-          <div className="w-12 h-12 border-4 border-cyan-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-xs font-mono text-[#8b949e] uppercase tracking-widest">Connecting to Mission Control Database...</p>
-        </div>
+  const handleCreateMission = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const formData = new FormData(e.currentTarget);
+    
+    // Basic validation
+    const title = formData.get('title') as string;
+    if (!title || title.length < 3) {
+      toast.error('Mission title must be at least 3 characters.');
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      await createMission({
+        title,
+        description: formData.get('description') as string,
+        priority: formData.get('priority') as any,
+        status: 'backlog',
+        assigned_agent_id: formData.get('agent_id') as string || null
+      });
+      toast.success('Mission initiated successfully.');
+      setShowCreateMission(false);
+      refreshData();
+    } catch (err) { 
+      console.error(err);
+      toast.error('Failed to initiate mission.');
+    } finally { setIsSaving(false); }
+  };
+
+  const handleConstructAgent = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const formData = new FormData(e.currentTarget);
+
+    // Basic validation
+    const name = formData.get('name') as string;
+    const role = formData.get('role') as string;
+    const caps = formData.get('caps') as string;
+
+    if (!name || name.length < 2) {
+      toast.error('Agent name must be at least 2 characters.');
+      return;
+    }
+    if (!caps || caps.split(',').length < 1) {
+      toast.error('At least one capability is required.');
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      await createAgent({
+        name,
+        role,
+        status: 'idle',
+        capabilities: caps.split(',').map(s => s.trim()),
+        token_burn_24h: 0
+      });
+      toast.success('Agent constructed successfully.');
+      setShowCreateAgent(false);
+      refreshData();
+    } catch (err) { 
+      console.error(err);
+      toast.error('Failed to construct agent.');
+    } finally { setIsSaving(false); }
+  };
+
+  const handleNewActivity = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const formData = new FormData(e.currentTarget);
+
+    // Basic validation
+    const task = formData.get('task') as string;
+    if (!task || task.length < 3) {
+      toast.error('Task must be at least 3 characters.');
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      await createTodo({
+        task,
+        mission_id: formData.get('mission_id') as string || null,
+        bot_id: formData.get('bot_id') as string || null,
+        status: 'pending'
+      });
+      toast.success('Activity logged.');
+      setShowCreateActivity(false);
+      refreshData();
+    } catch (err) { 
+      console.error(err);
+      toast.error('Failed to log activity.');
+    } finally { setIsSaving(false); }
+  };
+
+  if (loading) return (
+    <div className="min-h-screen bg-[#0d1117] flex items-center justify-center">
+      <div className="text-center">
+        <div className="w-12 h-12 border-4 border-cyan-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+        <p className="text-[10px] font-mono text-[#8b949e] uppercase tracking-widest">Initializing Core...</p>
       </div>
-    );
+    </div>
+  );
+
+  if (!user) {
+    return <AuthScreen />;
   }
 
   return (
-    <div className="min-h-screen bg-[#0d1117] text-[#c9d1d9] font-sans selection:bg-[#1f6feb] selection:text-white">
-      {error && (
-        <div className="fixed top-0 left-0 right-0 bg-red-500/20 border-b border-red-500/50 p-2 text-center text-xs font-mono text-red-400 z-50">
-          ⚠️ {error}
+    <div className="min-h-screen bg-[#0d1117] text-[#c9d1d9] font-sans selection:bg-[#1f6feb]">
+      <Toaster 
+        toastOptions={{
+          style: {
+            background: '#161b22',
+            color: '#fff',
+            border: '1px solid #30363d',
+            fontSize: '12px',
+            fontFamily: 'monospace',
+          },
+        }} 
+      />
+      <Sidebar activeView={activeView} setActiveView={setActiveView} user={user} />
+      
+      <main className="pl-64 pr-8 pt-8 pb-32">
+        {activeView === 'dashboard' && <Dashboard agents={agents} missions={missions} nodes={nodes} todos={todos} />}
+        {activeView === 'missions' && (
+          <Missions 
+            missions={missions} 
+            setMissions={setMissions} 
+            agents={agents} 
+            onInitiate={() => setShowCreateMission(true)} 
+            onDrillDown={setDetailMission}
+            refreshData={refreshData}
+          />
+        )}
+        {activeView === 'agents' && <Agents agents={agents} setAgents={setAgents} missions={missions} onConstruct={() => setShowCreateAgent(true)} />}
+        {activeView === 'nodes' && <Nodes nodes={nodes} />}
+        {activeView === 'tracker' && <ActivityLog todos={todos} setTodos={setTodos} agents={agents} missions={missions} onNewActivity={() => setShowCreateActivity(true)} />}
+      </main>
+
+      {/* MODALS */}
+      <Modal isOpen={showCreateMission} onClose={() => setShowCreateMission(false)} title="Initiate New Mission">
+        <form onSubmit={handleCreateMission} className="space-y-4">
+          <input name="title" required minLength={3} maxLength={100} placeholder="PROTOCOL IDENTIFIER (min 3 chars)" className="w-full bg-[#0d1117] border border-[#30363d] rounded-lg p-3 text-sm font-mono focus:border-cyan-500 transition-all" />
+          <textarea name="description" required minLength={10} maxLength={500} placeholder="Mission objective and operational parameters... (min 10 chars)" className="w-full bg-[#0d1117] border border-[#30363d] rounded-lg p-3 text-sm font-mono h-24 focus:border-cyan-500 transition-all" />
+          <select name="priority" className="w-full bg-[#0d1117] border border-[#30363d] rounded-lg p-3 text-sm font-mono">
+            <option value="low">LOW PRIORITY</option>
+            <option value="medium">MEDIUM</option>
+            <option value="high">HIGH</option>
+            <option value="critical">CRITICAL</option>
+          </select>
+          <select name="agent_id" className="w-full bg-[#0d1117] border border-[#30363d] rounded-lg p-3 text-sm font-mono">
+            <option value="">UNASSIGNED</option>
+            {agents.map(a => <option key={a.id} value={a.id}>{a.name} ({a.role})</option>)}
+          </select>
+          <button 
+            type="submit" 
+            disabled={isSaving}
+            className="w-full bg-cyan-500 text-black font-black uppercase text-xs py-3 rounded-lg hover:bg-white transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+          >
+            {isSaving && <Loader2 size={14} className="animate-spin" />}
+            {isSaving ? 'Processing...' : 'Engage'}
+          </button>
+        </form>
+      </Modal>
+
+      <Modal isOpen={showCreateAgent} onClose={() => setShowCreateAgent(false)} title="Construct New Agent Entity">
+        <form onSubmit={handleConstructAgent} className="space-y-4">
+          <input name="name" required minLength={2} maxLength={50} placeholder="UNIT NAME (min 2 chars)" className="w-full bg-[#0d1117] border border-[#30363d] rounded-lg p-3 text-sm font-mono focus:border-cyan-500 transition-all" />
+          <input name="role" required minLength={2} maxLength={100} placeholder="OPERATIONAL ROLE (e.g. Scraper, Oracle)" className="w-full bg-[#0d1117] border border-[#30363d] rounded-lg p-3 text-sm font-mono focus:border-cyan-500 transition-all" />
+          <input name="caps" required pattern=".*\w+.*" placeholder="CAPABILITIES (comma separated, min 1)" className="w-full bg-[#0d1117] border border-[#30363d] rounded-lg p-3 text-sm font-mono focus:border-cyan-500 transition-all" />
+          <button 
+            type="submit" 
+            disabled={isSaving}
+            className="w-full bg-cyan-500 text-black font-black uppercase text-xs py-3 rounded-lg hover:bg-white transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+          >
+            {isSaving && <Loader2 size={14} className="animate-spin" />}
+            {isSaving ? 'Processing...' : 'Initialize Unit'}
+          </button>
+        </form>
+      </Modal>
+
+      <Modal isOpen={showCreateActivity} onClose={() => setShowCreateActivity(false)} title="Registry Update: New Activity">
+        <form onSubmit={handleNewActivity} className="space-y-4">
+          <input name="task" required minLength={3} maxLength={200} placeholder="TASK DESCRIPTOR (min 3 chars)" className="w-full bg-[#0d1117] border border-[#30363d] rounded-lg p-3 text-sm font-mono focus:border-cyan-500 transition-all" />
+          <select name="mission_id" className="w-full bg-[#0d1117] border border-[#30363d] rounded-lg p-3 text-sm font-mono">
+            <option value="">NO MISSION SOURCE</option>
+            {missions.map(m => <option key={m.id} value={m.id}>{m.title}</option>)}
+          </select>
+          <select name="bot_id" className="w-full bg-[#0d1117] border border-[#30363d] rounded-lg p-3 text-sm font-mono">
+            <option value="">UNASSIGNED UNIT</option>
+            {agents.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+          </select>
+          <button 
+            type="submit" 
+            disabled={isSaving}
+            className="w-full bg-cyan-500 text-black font-black uppercase text-xs py-3 rounded-lg hover:bg-white transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+          >
+            {isSaving && <Loader2 size={14} className="animate-spin" />}
+            {isSaving ? 'Processing...' : 'Commit to Log'}
+          </button>
+        </form>
+      </Modal>
+
+      {/* Mission Drilldown Drawer */}
+      {detailMission && (
+        <div className="fixed inset-y-0 right-0 w-[450px] bg-[#0d1117] border-l border-[#30363d] z-[90] shadow-2xl animate-in slide-in-from-right duration-500 flex flex-col">
+          <header className="p-8 border-b border-[#30363d] flex items-center justify-between">
+            <div>
+              <div className="flex items-center gap-3 mb-2">
+                <StatusBadge status={detailMission.status} />
+                <PriorityBadge priority={detailMission.priority} />
+              </div>
+              <h2 className="text-2xl font-black text-white uppercase tracking-tight">{detailMission.title}</h2>
+            </div>
+            <button onClick={() => setDetailMission(null)} className="text-[#8b949e] hover:text-white p-2 hover:bg-[#161b22] rounded-lg transition-all"><X size={20} /></button>
+          </header>
+
+          <div className="flex-1 overflow-y-auto p-8 space-y-10">
+            <section>
+              <h3 className="text-[10px] font-black uppercase text-[#484f58] tracking-[0.2em] mb-4">Core Objective</h3>
+              <p className="text-sm text-[#8b949e] font-mono leading-relaxed">{detailMission.description}</p>
+            </section>
+
+            <section>
+              <h3 className="text-[10px] font-black uppercase text-[#484f58] tracking-[0.2em] mb-4">Operational Unit</h3>
+              {detailMission.assigned_agent_id ? (
+                <div className="p-4 rounded-xl bg-[#161b22] border border-[#30363d] flex items-center gap-4">
+                  <div className="w-10 h-10 rounded-lg bg-black flex items-center justify-center text-cyan-400 border border-[#30363d]">
+                    <Bot size={20} />
+                  </div>
+                  <div>
+                    <div className="text-xs font-black text-white uppercase tracking-wider">{agents.find(a => a.id === detailMission.assigned_agent_id)?.name}</div>
+                    <div className="text-[10px] font-mono text-cyan-500/50 uppercase">Active Assignment</div>
+                  </div>
+                </div>
+              ) : (
+                <div className="p-4 rounded-xl border border-dashed border-[#30363d] text-center text-[10px] font-black text-[#484f58] uppercase tracking-widest">No Unit Bound</div>
+              )}
+            </section>
+
+            <section>
+              <h3 className="text-[10px] font-black uppercase text-[#484f58] tracking-[0.2em] mb-4">Strategy & Action Plans</h3>
+              <div className="space-y-3">
+                {detailMission.action_plans?.map(plan => (
+                  <div key={plan.id} className="p-4 rounded-xl bg-[#161b22] border border-[#30363d]">
+                    <div className="flex items-center justify-between mb-4">
+                      <div className="text-[10px] font-black text-white uppercase tracking-widest">Plan-v{plan.id.slice(0,4)}</div>
+                      <StatusBadge status={plan.status} />
+                    </div>
+                    <p className="text-xs text-[#8b949e] mb-4">{plan.description}</p>
+                    <div className="space-y-2">
+                      {plan.steps.map((step, i) => (
+                        <div key={i} className="flex gap-3 text-[10px] font-mono">
+                          <span className="text-cyan-500">{i+1}.</span>
+                          <span className="text-[#c9d1d9]">{step}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </section>
+
+            <section>
+              <h3 className="text-[10px] font-black uppercase text-[#484f58] tracking-[0.2em] mb-4">Activity Stream</h3>
+              <div className="space-y-4">
+                {todos.filter(t => t.mission_id === detailMission.id).map(todo => (
+                  <div key={todo.id} className="flex gap-4">
+                    {todo.status === 'completed' ? <CheckCircle2 size={14} className="text-green-500" /> : <Clock size={14} className="text-[#30363d]" />}
+                    <div className="flex-1">
+                      <p className={`text-xs ${todo.status === 'completed' ? 'text-[#484f58] line-through' : 'text-[#c9d1d9]'}`}>{todo.task}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </section>
+          </div>
+
+          <footer className="p-8 border-t border-[#30363d] bg-black/20 flex gap-4">
+            <button 
+              onClick={() => detailMission.status !== 'completed' && window.confirm('Engage strategy for this mission?')}
+              className="flex-1 px-4 py-3 bg-cyan-500 text-black font-black uppercase text-[10px] tracking-[0.2em] rounded-lg hover:bg-white transition-all disabled:opacity-50"
+            >
+              Engage Strategy
+            </button>
+            <button 
+              onClick={() => { if (window.confirm('Abort mission? This cannot be undone.')) setDetailMission(null); }}
+              className="px-4 py-3 border border-[#30363d] text-[#8b949e] text-[10px] font-black uppercase tracking-[0.2em] rounded-lg hover:bg-[#161b22] hover:text-white transition-all"
+            >
+              Abort
+            </button>
+          </footer>
         </div>
       )}
-      <Sidebar activeView={activeView} setActiveView={setActiveView} />
-      
-      <main className={`md:ml-64 p-8 ${error ? 'pt-12' : ''}`}>
-        {activeView === 'dashboard' && <Dashboard agents={agents} missions={missions} nodes={nodes} todos={todos} />}
-        {activeView === 'tracker' && <TodoTracker todos={todos} setTodos={setTodos} agents={agents} missions={missions} />}
-        {activeView === 'missions' && <Missions missions={missions} setMissions={setMissions} agents={agents} />}
-        {activeView === 'agents' && <Agents agents={agents} setAgents={setAgents} missions={missions} />}
-        {activeView === 'nodes' && <Nodes nodes={nodes} />}
-      </main>
     </div>
   );
 }
