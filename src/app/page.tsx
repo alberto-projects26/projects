@@ -958,19 +958,43 @@ export default function Home() {
 
     setIsSaving(true);
     try {
-      await createAgent({
+      // 1. Register in Supabase
+      const newAgent = await createAgent({
         name,
         role,
         status: 'idle',
         capabilities: caps.split(',').map(s => s.trim()),
         token_burn_24h: 0
       });
-      toast.success('Agent constructed successfully.');
+
+      // 2. Deploy via OpenClaw CLI (via our internal API)
+      const tgToken = formData.get('tg_token') as string;
+      if (tgToken) {
+        toast('Deploying to OpenClaw...', { icon: '🚀' });
+        const deployRes = await fetch('/api/agents/deploy', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ 
+            agentId: newAgent.id, 
+            name, 
+            tgToken 
+          }),
+        });
+        
+        if (!deployRes.ok) {
+          const errorData = await deployRes.json();
+          throw new Error(errorData.message || 'Deployment failed');
+        }
+        toast.success('Agent deployed and bound to Telegram.');
+      } else {
+        toast.success('Agent registered (no Telegram bind).');
+      }
+
       setShowCreateAgent(false);
       refreshData();
-    } catch (err) { 
+    } catch (err: any) { 
       console.error(err);
-      toast.error('Failed to construct agent.');
+      toast.error(`Error: ${err.message || 'Action failed'}`);
     } finally { setIsSaving(false); }
   };
 
@@ -1077,6 +1101,7 @@ export default function Home() {
         <form onSubmit={handleConstructAgent} className="space-y-4">
           <input name="name" required minLength={2} maxLength={50} placeholder="UNIT NAME (min 2 chars)" className="w-full bg-[#0d1117] border border-[#30363d] rounded-lg p-3 text-sm font-mono focus:border-cyan-500 transition-all" />
           <input name="role" required minLength={2} maxLength={100} placeholder="OPERATIONAL ROLE (e.g. Scraper, Oracle)" className="w-full bg-[#0d1117] border border-[#30363d] rounded-lg p-3 text-sm font-mono focus:border-cyan-500 transition-all" />
+          <input name="tg_token" type="password" placeholder="TELEGRAM BOT TOKEN (REQUIRED FOR BIND)" className="w-full bg-[#0d1117] border border-[#30363d] rounded-lg p-3 text-sm font-mono focus:border-cyan-500 transition-all" />
           <input name="caps" required pattern=".*\w+.*" placeholder="CAPABILITIES (comma separated, min 1)" className="w-full bg-[#0d1117] border border-[#30363d] rounded-lg p-3 text-sm font-mono focus:border-cyan-500 transition-all" />
           <button 
             type="submit" 
