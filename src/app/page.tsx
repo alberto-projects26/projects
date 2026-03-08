@@ -7,11 +7,12 @@ import {
   Target, 
   ListTodo, 
   Users, 
-  Zap, 
+  Zap,
+  Search,
+  Code, 
   Cpu, 
   Plus, 
   ChevronRight, 
-  Search, 
   Bell, 
   MoreHorizontal, 
   Clock, 
@@ -33,6 +34,8 @@ import {
 } from 'lucide-react';
 import { Toaster, toast } from 'react-hot-toast';
 import AuthScreen from '../components/AuthScreen';
+import AgentRoom3D from '../components/3d/AgentRoom3D';
+import SpecialistDeployModal from '../components/SpecialistDeployModal';
 import { 
   DndContext, 
   closestCenter, 
@@ -113,6 +116,7 @@ export interface Agent {
   current_mission_id: string | null;
   token_burn_24h: number;
   capabilities: string[];
+  model?: string;
 }
 
 export interface Node {
@@ -240,56 +244,8 @@ function Dashboard({ agents = [], missions = [], nodes = [], todos = [] }: { age
         ))}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 space-y-6">
-          <div className="p-6 rounded-2xl border border-[#30363d] bg-[#161b22] relative overflow-hidden h-[400px]">
-             <div className="flex items-center justify-between mb-8">
-               <h3 className="text-xs font-black text-white uppercase tracking-widest flex items-center gap-2">
-                 <Activity size={14} className="text-cyan-400" />
-                 Resource Utilization
-               </h3>
-               <div className="flex gap-2">
-                 {['CPU', 'MEM', 'NET'].map(label => (
-                   <span key={label} className="text-[10px] font-mono text-[#484f58] border border-[#30363d] px-2 py-0.5 rounded uppercase">{label}</span>
-                 ))}
-               </div>
-             </div>
-             <div className="h-full flex items-end gap-1 px-4 pb-12">
-               {[...Array(40)].map((_, i) => (
-                 <div key={i} className="flex-1 bg-cyan-500/20 rounded-t-sm relative group cursor-crosshair" style={{ height: `${Math.random() * 80 + 10}%` }}>
-                   <div className="absolute inset-0 bg-cyan-400 opacity-0 group-hover:opacity-40 transition-opacity rounded-t-sm"></div>
-                 </div>
-               ))}
-             </div>
-          </div>
-        </div>
-
-        <div className="space-y-6">
-           <div className="p-6 rounded-2xl border border-[#30363d] bg-[#161b22]">
-             <h3 className="text-xs font-black text-white uppercase tracking-widest mb-6 flex items-center gap-2">
-               <Bell size={14} className="text-amber-400" />
-               Signal Stream
-             </h3>
-             <div className="space-y-4">
-               {[
-                 { msg: 'Agent "Recon-1" completed mission: Market Scan', time: '2m ago', type: 'success' },
-                 { msg: 'Node "Mac-Mini" resource spike detected', time: '15m ago', type: 'warn' },
-                 { msg: 'System backup synchronized with Supabase', time: '44m ago', type: 'info' },
-                 { msg: 'New mission protocol initiated: Deployment A', time: '1h ago', type: 'info' },
-               ].map((signal, i) => (
-                 <div key={i} className="flex gap-4 animate-in slide-in-from-right-4 duration-500" style={{ animationDelay: `${i * 100}ms` }}>
-                    <div className="w-px bg-[#30363d] relative">
-                      <div className="absolute top-2 -left-1 w-2 h-2 rounded-full bg-[#30363d]"></div>
-                    </div>
-                    <div className="pb-4">
-                      <p className="text-xs text-[#c9d1d9] mb-1">{signal.msg}</p>
-                      <span className="text-[10px] font-mono text-[#8b949e] uppercase">{signal.time}</span>
-                    </div>
-                 </div>
-               ))}
-             </div>
-           </div>
-        </div>
+      <div className="rounded-2xl border border-[#30363d] bg-[#161b22] relative overflow-hidden h-[600px]">
+        <AgentRoom3D agents={agents} />
       </div>
     </div>
   );
@@ -526,11 +482,19 @@ function AgentCard({ agent, onRetire, missions = [] }: { agent: Agent; onRetire:
       <div className="flex items-start justify-between mb-6 relative">
         <div className="flex items-center gap-4">
           <div className="w-12 h-12 rounded-lg bg-[#0d1117] border border-[#30363d] flex items-center justify-center text-cyan-500 group-hover:shadow-[0_0_15px_rgba(6,182,212,0.3)] transition-all">
-            <Users size={24} />
+            {agent.id.startsWith('research') ? <Search size={24} /> : 
+             agent.id.startsWith('code') ? <Code size={24} /> :
+             agent.id.startsWith('ops') ? <Zap size={24} /> :
+             agent.id.startsWith('analysis') ? <Activity size={24} /> :
+             <Users size={24} />}
           </div>
           <div>
             <h4 className="text-white font-black uppercase tracking-tight group-hover:text-cyan-400 transition-colors">{agent.name}</h4>
-            <p className="text-[10px] font-mono text-[#8b949e] uppercase tracking-widest">{agent.role}</p>
+            <div className="text-[10px] text-[#8b949e] font-mono uppercase tracking-widest flex items-center gap-2">
+            <span className="w-1.5 h-1.5 rounded-full bg-cyan-500/50"></span>
+            {agent.model || 'Standard Engine'}
+          </div>
+          <p className="text-[10px] font-mono text-[#8b949e] uppercase tracking-widest">{agent.role}</p>
           </div>
         </div>
         <StatusBadge status={agent.status} />
@@ -570,7 +534,7 @@ function AgentCard({ agent, onRetire, missions = [] }: { agent: Agent; onRetire:
   );
 }
 
-function Agents({ agents = [], setAgents, missions = [], onConstruct }: { agents?: Agent[]; setAgents: (a: Agent[]) => void; missions?: Mission[]; onConstruct: () => void }) {
+function Agents({ agents = [], setAgents, missions = [], onConstruct, onDeploySpecialist }: { agents?: Agent[]; setAgents: (a: Agent[]) => void; missions?: Mission[]; onConstruct: () => void; onDeploySpecialist: () => void }) {
   const handleRetire = async (id: string) => {
     const agent = agents.find(a => a.id === id);
     if (!agent) return;
@@ -599,13 +563,22 @@ function Agents({ agents = [], setAgents, missions = [], onConstruct }: { agents
           </h1>
           <p className="text-xs font-mono text-[#8b949e] uppercase tracking-[0.2em]">Agent Lifecycle / Roster Control</p>
         </div>
-        <button 
-          onClick={onConstruct}
-          className="px-6 py-2 bg-white text-black font-black uppercase text-xs tracking-widest rounded-full hover:bg-cyan-500 hover:text-white transition-all flex items-center gap-2 group"
-        >
-          <Plus size={16} className="group-hover:rotate-90 transition-transform" />
-          CONSTRUCT AGENT
-        </button>
+        <div className="flex gap-3">
+          <button 
+            onClick={onDeploySpecialist}
+            className="px-6 py-2 bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 font-black uppercase text-xs tracking-widest rounded-full hover:bg-cyan-500 hover:text-black transition-all flex items-center gap-2 group"
+          >
+            <Zap size={16} className="group-hover:animate-pulse" />
+            Deploy Specialist
+          </button>
+          <button 
+            onClick={onConstruct}
+            className="px-6 py-2 bg-white text-black font-black uppercase text-xs tracking-widest rounded-full hover:bg-cyan-500 hover:text-white transition-all flex items-center gap-2 group"
+          >
+            <Plus size={16} className="group-hover:rotate-90 transition-transform" />
+            Construct Agent
+          </button>
+        </div>
       </header>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
         {agents.map(agent => (
@@ -619,26 +592,84 @@ function Agents({ agents = [], setAgents, missions = [], onConstruct }: { agents
 // ============ NODE NETWORK ============
 
 function NodeCard({ node }: { node: Node }) {
+  const [metrics, setMetrics] = useState<{ cpu: number; mem: number; freeMemGB?: number; usedMemGB?: number; totalMemGB?: number; topProcesses: any[] } | null>(null);
+
+  useEffect(() => {
+    if (node.id !== 'mac-mini-hub') return;
+    const fetchMetrics = async () => {
+      try {
+        const res = await fetch('/api/system-metrics');
+        const data = await res.json();
+        setMetrics(data);
+      } catch (e) {
+        console.error('Failed to fetch metrics:', e);
+      }
+    };
+    fetchMetrics();
+    const interval = setInterval(fetchMetrics, 15000); // 15 sec
+    return () => clearInterval(interval);
+  }, [node.id]);
+
+  const cpuLoad = metrics?.cpu ?? 0;
+  const bars = 20;
+  const activeBars = Math.max(1, Math.round((cpuLoad / 100) * bars));
+
   return (
     <div className="group relative p-6 rounded-xl border border-[#30363d] bg-[#161b22] hover:border-[#484f58] transition-all overflow-hidden shadow-[0_0_15px_rgba(0,0,0,0.2)]">
       <div className="flex items-center justify-between mb-8">
-        <div className="p-3 rounded-xl bg-[#0d1117] border border-[#30363d] text-[#c9d1d9] group-hover:text-red-500 group-hover:shadow-[0_0_20px_rgba(239,68,68,0.2)] transition-all">
+        <div className="p-3 rounded-xl bg-[#0d1117] border border-[#30363d] text-[#c9d1d9] group-hover:text-cyan-500 group-hover:shadow-[0_0_20px_rgba(6,182,212,0.2)] transition-all">
           <Cpu size={24} />
         </div>
         <StatusBadge status={node.status} />
       </div>
       <h4 className="text-white font-black uppercase text-lg mb-1 tracking-tight">{node.name}</h4>
       <p className="text-[10px] font-mono text-[#8b949e] uppercase mb-6">{node.type} • {node.location}</p>
-      <div className="space-y-3">
-        <div className="flex gap-1 h-1">
-          {[...Array(20)].map((_, i) => (
-            <div key={i} className={`flex-1 rounded-full ${node.status === 'online' ? (i < 14 ? 'bg-red-500' : 'bg-[#30363d]') : 'bg-white/5'}`}></div>
-          ))}
+      
+      <div className="space-y-6">
+        {/* CPU */}
+        <div className="space-y-3">
+          <div className="flex gap-1 h-1">
+            {[...Array(bars)].map((_, i) => (
+              <div key={i} className={`flex-1 rounded-full ${node.status === 'online' ? (i < activeBars ? 'bg-cyan-500 shadow-[0_0_8px_rgba(6,182,212,0.5)]' : 'bg-[#30363d]') : 'bg-white/5'}`}></div>
+            ))}
+          </div>
+          <div className="flex justify-between text-[8px] font-black text-[#484f58] uppercase tracking-widest">
+            <span>CPU Load</span>
+            <span className="text-cyan-400">{cpuLoad}%</span>
+          </div>
         </div>
-        <div className="flex justify-between text-[8px] font-black text-[#484f58] uppercase tracking-widest">
-          <span>Processing Load</span>
-          <span>72%</span>
-        </div>
+
+        {/* Memory */}
+        {metrics?.totalMemGB && (
+          <div className="space-y-3">
+            <div className="flex gap-1 h-1">
+              {[...Array(bars)].map((_, i) => (
+                <div key={i} className={`flex-1 rounded-full ${node.status === 'online' ? (i < Math.round((metrics.usedMemGB! / metrics.totalMemGB!) * bars) ? 'bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.5)]' : 'bg-[#30363d]') : 'bg-white/5'}`}></div>
+              ))}
+            </div>
+            <div className="flex justify-between text-[8px] font-black text-[#484f58] uppercase tracking-widest">
+              <span>Memory: {metrics.usedMemGB}GB / {metrics.totalMemGB}GB</span>
+              <span className="text-amber-400">AVAIL: {metrics.freeMemGB}GB</span>
+            </div>
+          </div>
+        )}
+
+        {metrics?.topProcesses && (
+          <div className="space-y-2 pt-4 border-t border-[#30363d]">
+            <h5 className="text-[8px] font-black text-[#8b949e] uppercase tracking-widest mb-3 italic">Active Resource Consumers</h5>
+            {metrics.topProcesses.slice(0, 3).map((ps, i) => (
+              <div key={i} className="flex flex-col gap-1 mb-2">
+                <div className="flex justify-between items-center text-[9px] font-mono text-[#c9d1d9]">
+                  <span className="truncate max-w-[150px] text-white opacity-80">{ps.name}</span>
+                  <div className="flex gap-3">
+                    <span className="text-cyan-500/70">{ps.cpu}% CPU</span>
+                    <span className="text-amber-500/70">{ps.memMB}MB</span>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -729,13 +760,9 @@ function ActivityLog({ todos, setTodos, agents, missions, onNewActivity }: { tod
             </tr>
           </thead>
           <tbody>
-            <DndContext sensors={sensors} collisionDetection={closestCenter}>
-              <SortableContext items={activeTodos.map(t => t.id)} strategy={verticalListSortingStrategy}>
-                {activeTodos.map(todo => (
-                  <ActivityRow key={todo.id} todo={todo} agents={agents} missions={missions} onToggle={(id) => {}} />
-                ))}
-              </SortableContext>
-            </DndContext>
+            {activeTodos.map(todo => (
+              <ActivityRow key={todo.id} todo={todo} agents={agents} missions={missions} onToggle={(id) => {}} />
+            ))}
           </tbody>
         </table>
       </div>
@@ -841,7 +868,7 @@ export default function Home() {
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search);
       const view = params.get('view');
-      if (view && ['dashboard', 'tracker', 'missions', 'agents', 'nodes'].includes(view)) return view;
+      if (view && ['dashboard', 'view3d', 'tracker', 'missions', 'agents', 'nodes'].includes(view)) return view;
     }
     return 'dashboard';
   };
@@ -859,6 +886,7 @@ export default function Home() {
   // Modal states
   const [showCreateMission, setShowCreateMission] = useState(false);
   const [showCreateAgent, setShowCreateAgent] = useState(false);
+  const [showDeploySpecialist, setShowDeploySpecialist] = useState(false);
   const [showCreateActivity, setShowCreateActivity] = useState(false);
   const [detailMission, setDetailMission] = useState<Mission | null>(null);
 
@@ -899,8 +927,15 @@ export default function Home() {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'todos' }, () => { refreshData(); })
       .subscribe();
 
-    return () => { supabase.removeChannel(channel); };
-  }, []);
+    const interval = setInterval(() => {
+      refreshData();
+    }, 60000); // 1 minute
+
+    return () => { 
+      supabase.removeChannel(channel); 
+      clearInterval(interval);
+    };
+  }, [user]);
 
   const refreshData = async () => {
     try {
@@ -1066,7 +1101,15 @@ export default function Home() {
             refreshData={refreshData}
           />
         )}
-        {activeView === 'agents' && <Agents agents={agents} setAgents={setAgents} missions={missions} onConstruct={() => setShowCreateAgent(true)} />}
+        {activeView === 'agents' && (
+          <Agents 
+            agents={agents} 
+            setAgents={setAgents} 
+            missions={missions} 
+            onConstruct={() => setShowCreateAgent(true)} 
+            onDeploySpecialist={() => setShowDeploySpecialist(true)}
+          />
+        )}
         {activeView === 'nodes' && <Nodes nodes={nodes} />}
         {activeView === 'tracker' && <ActivityLog todos={todos} setTodos={setTodos} agents={agents} missions={missions} onNewActivity={() => setShowCreateActivity(true)} />}
       </main>
@@ -1096,6 +1139,12 @@ export default function Home() {
           </button>
         </form>
       </Modal>
+
+      <SpecialistDeployModal 
+        isOpen={showDeploySpecialist} 
+        onClose={() => setShowDeploySpecialist(false)}
+        onDeploy={() => refreshData()}
+      />
 
       <Modal isOpen={showCreateAgent} onClose={() => setShowCreateAgent(false)} title="Construct New Agent Entity">
         <form onSubmit={handleConstructAgent} className="space-y-4">
