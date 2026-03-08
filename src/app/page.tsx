@@ -211,16 +211,6 @@ function Dashboard({ agents = [], missions = [], nodes = [], todos = [] }: { age
 
   return (
     <div className="space-y-8 animate-in fade-in duration-700">
-      <header className="flex items-end justify-between border-b border-[#30363d] pb-6">
-        <div>
-        <div className="hidden lg:flex gap-4">
-          <div className="text-right">
-            <div className="text-[10px] font-bold text-[#8b949e] uppercase tracking-widest">Uptime</div>
-            <div className="text-sm font-mono text-white">14:02:44:19</div>
-          </div>
-        </div>
-      </header>
-
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {stats.map(stat => (
           <div key={stat.label} className={`p-6 rounded-2xl border border-[#30363d] bg-[#161b22] relative overflow-hidden group ${stat.glow}`}>

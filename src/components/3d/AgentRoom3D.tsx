@@ -497,7 +497,7 @@ export default function AgentRoom3D({ agents = [] }: { agents?: any[] }) {
           {/* Log Entries */}
           <div className="space-y-2 mb-6 min-h-[120px]">
             {activityLog.length === 0 ? (
-              
+              <p className="text-[10px] font-mono text-gray-500">Waiting for activity...</p>
             ) : (
               activityLog.map((entry, i) => (
                 <motion.div
