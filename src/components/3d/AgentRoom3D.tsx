@@ -390,12 +390,7 @@ export default function AgentRoom3D({ agents = [] }: { agents?: any[] }) {
       {/* Header */}
       <header className="flex items-end justify-between border-b border-[#30363d] pb-6">
         <div>
-          <h1 className="text-3xl font-black text-white mb-1 tracking-tight flex items-center gap-3">
-            <span className="w-1 h-8 bg-cyan-500 rounded-full"></span>
-            COMMAND CENTER <span className="text-cyan-400">3D</span>
-          </h1>
-          <p className="text-xs font-mono text-[#8b949e] uppercase tracking-[0.2em]">Neural Network Monitoring System v3.0</p>
-        </div>
+          </div>
         
         {/* Stats */}
         <div className="flex gap-4">
@@ -502,7 +497,7 @@ export default function AgentRoom3D({ agents = [] }: { agents?: any[] }) {
           {/* Log Entries */}
           <div className="space-y-2 mb-6 min-h-[120px]">
             {activityLog.length === 0 ? (
-              <p className="text-[10px] font-mono text-gray-500">Monitoring neural activity...</p>
+              
             ) : (
               activityLog.map((entry, i) => (
                 <motion.div

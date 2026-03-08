@@ -213,12 +213,6 @@ function Dashboard({ agents = [], missions = [], nodes = [], todos = [] }: { age
     <div className="space-y-8 animate-in fade-in duration-700">
       <header className="flex items-end justify-between border-b border-[#30363d] pb-6">
         <div>
-          <h1 className="text-3xl font-black text-white mb-1 tracking-tight flex items-center gap-3">
-            <span className="w-1 h-8 bg-cyan-500 rounded-full"></span>
-            COMMAND CENTER
-          </h1>
-          <p className="text-xs font-mono text-[#8b949e] uppercase tracking-[0.2em]">Fleet Status / System Telemetry</p>
-        </div>
         <div className="hidden lg:flex gap-4">
           <div className="text-right">
             <div className="text-[10px] font-bold text-[#8b949e] uppercase tracking-widest">Uptime</div>
@@ -244,7 +238,7 @@ function Dashboard({ agents = [], missions = [], nodes = [], todos = [] }: { age
         ))}
       </div>
 
-      <div className="rounded-2xl border border-[#30363d] bg-[#161b22] relative overflow-hidden h-[600px]">
+      <div className="relative overflow-hidden h-[600px]">
         <AgentRoom3D agents={agents} />
       </div>
     </div>
