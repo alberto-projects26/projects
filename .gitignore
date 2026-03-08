@@ -39,6 +39,9 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+<<<<<<< HEAD
 
 # local data
 .mission-control/
+=======
+>>>>>>> 06ed51ec8a2669717478a18a7c09913c21f89286
