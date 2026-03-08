@@ -27,14 +27,6 @@ export interface Agent {
   capabilities?: string[];
 }
 
-export interface AgentSession {
-  id: string;
-  agentId: string;
-  channel: 'telegram' | 'whatsapp' | 'discord' | 'signal' | 'web';
-  startedAt: string;
-  messages: Message[];
-}
-
 export interface Message {
   id: string;
   role: 'user' | 'assistant' | 'system';
@@ -50,7 +42,7 @@ export interface Message {
 export type NodeStatus = 'online' | 'offline' | 'busy';
 export type NodeType = 'mac-mini' | 'iphone' | 'android' | 'pi' | 'server';
 
-export interface Node {
+export interface ClawNode {
   id: string;
   name: string;
   type: NodeType;

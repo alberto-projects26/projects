@@ -1,8 +1,13 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { MockOpenClawAdapter, createOpenClawAdapter } from '@/services/openclaw/adapter';
+import {
+  MockOpenClawAdapter,
+  OpenClawHttpAdapter,
+  createOpenClawAdapter,
+} from '@/services/openclaw';
+import type { IOpenClawAdapter } from '@/services/openclaw';
 
 describe('OpenClaw Adapter', () => {
-  let adapter: MockOpenClawAdapter;
+  let adapter: IOpenClawAdapter;
 
   beforeEach(() => {
     adapter = new MockOpenClawAdapter();
@@ -11,6 +16,13 @@ describe('OpenClaw Adapter', () => {
   describe('Mock Adapter', () => {
     it('should create a mock adapter', () => {
       expect(adapter).toBeDefined();
+    });
+
+    it('should report disconnected status before connect', () => {
+      const status = adapter.getStatus();
+      expect(status.connected).toBe(false);
+      expect(status.lastSync).toBeNull();
+      expect(status.error).toBeNull();
     });
 
     it('should connect successfully', async () => {
@@ -32,8 +44,7 @@ describe('OpenClaw Adapter', () => {
       expect(status.connected).toBe(false);
     });
 
-    it('should return agents after connect', async () => {
-      await adapter.connect();
+    it('should return agents', async () => {
       const agents = await adapter.getAgents();
       expect(agents).toBeDefined();
       expect(Array.isArray(agents)).toBe(true);
@@ -41,37 +52,69 @@ describe('OpenClaw Adapter', () => {
     });
 
     it('should get a specific agent by id', async () => {
-      await adapter.connect();
       const agent = await adapter.getAgent('agent:main:main');
       expect(agent).toBeDefined();
       expect(agent?.name).toBe('Jarvis');
     });
 
     it('should return null for unknown agent', async () => {
-      await adapter.connect();
       const agent = await adapter.getAgent('unknown');
       expect(agent).toBeNull();
     });
 
     it('should spawn a new agent', async () => {
-      await adapter.connect();
       const newAgent = await adapter.spawnAgent({ name: 'TestBot' });
       expect(newAgent).toBeDefined();
       expect(newAgent.name).toBe('TestBot');
       expect(newAgent.id).toContain('agent:subagent:');
     });
 
+    it('should include spawned agent in subsequent getAgents call', async () => {
+      const before = await adapter.getAgents();
+      await adapter.spawnAgent({ name: 'SpawnedBot' });
+      const after = await adapter.getAgents();
+      expect(after.length).toBe(before.length + 1);
+      expect(after.find(a => a.name === 'SpawnedBot')).toBeDefined();
+    });
+
     it('should return empty nodes array', async () => {
-      await adapter.connect();
       const nodes = await adapter.getNodes();
       expect(nodes).toEqual([]);
+    });
+
+    it('should return null for unknown node', async () => {
+      const node = await adapter.getNode('unknown');
+      expect(node).toBeNull();
+    });
+
+    it('should return empty sessions array', async () => {
+      const sessions = await adapter.getSessions();
+      expect(sessions).toEqual([]);
+    });
+
+    it('should throw on sendMessage', async () => {
+      await expect(adapter.sendMessage('s1', 'hello')).rejects.toThrow(
+        'Not implemented in mock',
+      );
     });
   });
 
   describe('Factory', () => {
     it('should create mock adapter by default', () => {
-      const adapter = createOpenClawAdapter('mock');
-      expect(adapter).toBeInstanceOf(MockOpenClawAdapter);
+      const mock = createOpenClawAdapter('mock');
+      expect(mock).toBeInstanceOf(MockOpenClawAdapter);
+    });
+
+    it('should create mock adapter when no mode specified', () => {
+      const mock = createOpenClawAdapter();
+      expect(mock).toBeInstanceOf(MockOpenClawAdapter);
+    });
+
+    it('should create HTTP adapter with valid config', () => {
+      const http = createOpenClawAdapter('http', {
+        gatewayUrl: 'http://localhost:8080',
+      });
+      expect(http).toBeInstanceOf(OpenClawHttpAdapter);
     });
 
     it('should throw error for HTTP adapter without config', () => {
