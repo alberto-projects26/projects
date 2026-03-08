@@ -1089,7 +1089,7 @@ export default function Home() {
       />
       <Sidebar activeView={activeView} setActiveView={setActiveView} user={user} />
       
-      <main className="pl-64 pr-8 pt-8 pb-32">
+      <main className="pt-8 pb-32">
         {activeView === 'dashboard' && <Dashboard agents={agents} missions={missions} nodes={nodes} todos={todos} />}
         {activeView === 'missions' && (
           <Missions 
