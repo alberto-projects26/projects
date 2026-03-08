@@ -388,21 +388,7 @@ export default function AgentRoom3D({ agents = [] }: { agents?: any[] }) {
   return (
     <div className="space-y-6 animate-in fade-in duration-700">
       {/* Header */}
-      <header className="flex items-end justify-between border-b border-[#30363d] pb-6">
-        <div>
-          </div>
-        
-        {/* Stats */}
-        <div className="flex gap-4">
-          <div className="px-4 py-3 rounded-xl bg-black/60 border border-cyan-500/50 backdrop-blur-sm">
-            <div className="text-[10px] text-cyan-400/70 uppercase tracking-widest">Active</div>
-            <div className="text-2xl font-black text-cyan-400">{activeAgents.length}</div>
-          </div>
-          <div className="px-4 py-3 rounded-xl bg-black/60 border border-green-500/50 backdrop-blur-sm">
-            <div className="text-[10px] text-green-400/70 uppercase tracking-widest">Working</div>
-            <div className="text-2xl font-black text-green-400">{workingCount}</div>
-          </div>
-        </div>
+      <header className="pb-6">
       </header>
 
       <div className="flex gap-6">
